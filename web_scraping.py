@@ -72,4 +72,7 @@ all_data_clean.reset_index(inplace = True, drop = True)
 # Konwersja danych na plik Excela
 #all_data_clean.to_excel('WoT_Ranking.xlsx', sheet_name = 'Baza')
 
+# Konwersja danych na plik json 
+
+
 print(all_data_clean)
