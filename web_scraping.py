@@ -11,10 +11,6 @@ pd.set_option("mode.copy_on_write", True)
 
 urls = [
     "http://wotreplays.eu/site/6799640#ensk-iain11-grille_15",
-    "http://wotreplays.eu/site/6799641#ensk-iain11-grille_15",
-    "http://wotreplays.eu/site/6799644#cliff-iain11-grille_15",
-    "http://wotreplays.eu/site/6799645#cliff-iain11-grille_15",
-    "http://wotreplays.eu/site/6799646#studzianki-iain11-grille_15",
 ]
 
 

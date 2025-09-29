@@ -1,3 +1,4 @@
 *.xlsx
 *.json
 venv/
+*.wotreplay
