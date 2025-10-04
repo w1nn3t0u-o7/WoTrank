@@ -1,4 +1,4 @@
-# The plan
+# The plan (DEVELOPMENT PAUSED)
 
 ## Databases
 
@@ -67,3 +67,11 @@
 - Base capture points
 - Base defense points
 - Distance traveled
+
+## TODO
+
+- [ ] Finish parsing all the data from replays
+- [ ] Finish adding columns to the database
+- [ ] Generate a config file for replays metadata
+- [ ] Use MediaWiki API to collect necessary data to fill in
+- [ ] Create na app to display the data on a website
