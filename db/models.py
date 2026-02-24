@@ -1,0 +1,85 @@
+from datetime import datetime
+from sqlalchemy import (
+    Column, Integer, BigInteger, String, Boolean,
+    DateTime, ForeignKey, create_engine
+)
+from sqlalchemy.orm import DeclarativeBase, relationship
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Match(Base):
+    __tablename__ = "matches"
+
+    id               = Column(Integer, primary_key=True)
+    arena_unique_id  = Column(String, unique=True, nullable=False)  # deduplication key
+    replay_file      = Column(String)
+    date_time        = Column(DateTime)
+    map_name         = Column(String)
+    map_display_name = Column(String)
+    gameplay_id      = Column(String)
+    battle_type      = Column(Integer)
+    bonus_type       = Column(Integer)   # 14 = CW/tournament
+    duration_sec     = Column(Integer)
+    winner_team      = Column(Integer)
+    wot_version      = Column(String)
+    server_name      = Column(String)
+    recorder_name    = Column(String)
+    recorder_id      = Column(BigInteger)
+    source           = Column(String, default="replay")  # "replay" | "manual"
+
+    entries = relationship("PlayerEntry", back_populates="match")
+
+
+class PlayerEntry(Base):
+    __tablename__ = "player_entries"
+
+    id         = Column(Integer, primary_key=True)
+    match_id   = Column(Integer, ForeignKey("matches.id"), nullable=False)
+
+    # Identity (filled from block0 vehicles / block1 roster + players dict)
+    account_id = Column(BigInteger)
+    name       = Column(String)
+    clan       = Column(String)
+    team       = Column(Integer)
+    entity_id  = Column(String)
+
+    # Vehicle
+    vehicle_type   = Column(String)   # "germany:G125_Spz_57_Rh"
+    vehicle_nation = Column(String)   # "germany"
+    vehicle_tag    = Column(String)   # "G125_Spz_57_Rh"
+
+    # Core performance
+    kills                    = Column(Integer)
+    damage_dealt             = Column(Integer)
+    damage_assisted_radio    = Column(Integer)
+    damage_assisted_track    = Column(Integer)
+    damage_assisted_stun     = Column(Integer)
+    damage_assisted_inspire  = Column(Integer)
+    damage_assisted_smoke    = Column(Integer)
+    damage_blocked           = Column(Integer)
+    damage_received          = Column(Integer)
+    spotted                  = Column(Integer)
+
+    # Shots
+    shots              = Column(Integer)
+    direct_hits        = Column(Integer)
+    piercings          = Column(Integer)
+    piercings_received = Column(Integer)
+
+    # Survival
+    survived            = Column(Boolean)
+    life_time_sec       = Column(Integer)
+    death_reason        = Column(Integer)   # -1 = survived
+    killed_by_entity_id = Column(String)    # from deathInfo.killerID
+
+    # Economy
+    xp      = Column(Integer)
+    credits = Column(Integer)
+
+    # Data quality
+    source = Column(String, default="replay")   # "replay" | "manual"
+
+    match = relationship("Match", back_populates="entries")
