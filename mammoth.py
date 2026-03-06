@@ -4,6 +4,7 @@ from pathlib import Path
 from db.database import engine, init_db, SessionLocal
 from db.models import Base
 from parser.replay_importer import import_replay, parse_replay_blocks
+from parser.liquipedia_sync import sync_tournament
 
 
 def create_tables():
@@ -83,6 +84,9 @@ def export_to_json(replay_path: str, output_path: str, block: str = None):
     else:
         print(json_str)
 
+def sync_liquipedia(tournament_name: str):
+    sync_tournament(tournament_name)
+
 
 COMMANDS = {
     "create":    (create_tables,   "Create tables"),
@@ -91,6 +95,7 @@ COMMANDS = {
     "import":    (import_one,      "Import one replay:    import <path>"),
     "importall": (import_directory,   "Import whole directory:  importall <path>"),
     "export":    (export_to_json,   "Export replay to JSON:  export <replay_path> <output_path> [block]"),
+    "sync":      (sync_liquipedia, "Sync tournament from Liquipedia: sync <tournament_pagename>"),
 }
 
 

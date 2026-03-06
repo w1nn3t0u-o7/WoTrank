@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, BigInteger, String, Boolean,
-    DateTime, ForeignKey, create_engine
+    DateTime, ForeignKey
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -9,11 +9,55 @@ from sqlalchemy.orm import DeclarativeBase, relationship
 class Base(DeclarativeBase):
     pass
 
+class Tournament(Base):
+    __tablename__ = "tournaments"
+
+    id          = Column(Integer, primary_key=True)
+    name        = Column(String, unique=True, nullable=False)
+    liquipedia_id = Column(Integer, unique=True)
+    start_date  = Column(DateTime)
+    end_date    = Column(DateTime)
+
+    matches = relationship("Match", back_populates="tournament")
+
+class Team(Base):
+    __tablename__ = "teams"
+
+    id          = Column(Integer, primary_key=True)
+    name        = Column(String, unique=True)
+    liquipedia_id = Column(Integer, unique=True)
+
+class Player(Base):
+    __tablename__ = "players"
+
+    id          = Column(Integer, primary_key=True)
+    name        = Column(String, unique=True)
+    liquipedia_id = Column(Integer, unique=True)
+    account_id  = Column(BigInteger, unique=True)
+
+    entries = relationship("PlayerEntry", back_populates="player")
 
 class Match(Base):
     __tablename__ = "matches"
 
     id               = Column(Integer, primary_key=True)
+    tournament_id     = Column(Integer, ForeignKey("tournaments.id"))
+    liquipedia_id    = Column(Integer, unique=True)
+    team1_id         = Column(Integer, ForeignKey("teams.id"))
+    team2_id         = Column(Integer, ForeignKey("teams.id"))
+    winner_team_id   = Column(Integer, ForeignKey("teams.id"))
+    stage            = Column(String)   # "Group Stage", "Quarterfinals", etc.
+    datetime         = Column(DateTime)
+
+    tournament = relationship("Tournament", back_populates="matches")
+    rounds = relationship("Round", back_populates="match")
+
+class Round(Base):
+    __tablename__ = "rounds"
+
+    id               = Column(Integer, primary_key=True)
+    match_id         = Column(Integer, ForeignKey("matches.id"))
+    round_number     = Column(Integer)   # 1, 2, 3, etc.
     arena_unique_id  = Column(String, unique=True, nullable=False)  # deduplication key
     replay_file      = Column(String)
     date_time        = Column(DateTime)
@@ -30,14 +74,17 @@ class Match(Base):
     recorder_id      = Column(BigInteger)
     source           = Column(String, default="replay")  # "replay" | "manual"
 
-    entries = relationship("PlayerEntry", back_populates="match")
+    match = relationship("Match", back_populates="rounds")
+    entries = relationship("PlayerEntry", back_populates="round")
 
 
 class PlayerEntry(Base):
     __tablename__ = "player_entries"
 
     id         = Column(Integer, primary_key=True)
-    match_id   = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    round_id   = Column(Integer, ForeignKey("rounds.id"), nullable=False)
+    match_id   = Column(Integer, ForeignKey("matches.id"))
+    player_id  = Column(Integer, ForeignKey("players.id"))
 
     # Identity (filled from block0 vehicles / block1 roster + players dict)
     account_id = Column(BigInteger)
@@ -82,4 +129,5 @@ class PlayerEntry(Base):
     # Data quality
     source = Column(String, default="replay")   # "replay" | "manual"
 
-    match = relationship("Match", back_populates="entries")
+    round = relationship("Round", back_populates="entries")
+    player = relationship("Player", back_populates="entries")
