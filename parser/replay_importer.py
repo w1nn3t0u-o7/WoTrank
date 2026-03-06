@@ -2,6 +2,7 @@ import json
 import struct
 import datetime
 from pathlib import Path
+from db.models import Match, PlayerEntry
 
 MAGIC_NUM = b"\x12\x32\x34\x11"
 OBSERVER_VEHICLE = "ussr:Observer"

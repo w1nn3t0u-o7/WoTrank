@@ -4,3 +4,4 @@ venv/
 *.wotreplay
 *.db
 .env
+*.pyc
