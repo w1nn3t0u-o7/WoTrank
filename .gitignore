@@ -3,3 +3,4 @@
 venv/
 *.wotreplay
 *.db
+.env
