@@ -31,15 +31,16 @@ class Team(Base):
     __tablename__ = "teams"
 
     id          = Column(Integer, primary_key=True)
-    name        = Column(String, unique=True)
     liquipedia_id = Column(Integer, unique=True)
+    name        = Column(String, unique=True, nullable=False)
 
 class Player(Base):
     __tablename__ = "players"
 
     id          = Column(Integer, primary_key=True)
-    name        = Column(String, unique=True)
     liquipedia_id = Column(Integer, unique=True)
+    name        = Column(String, unique=True, nullable=False)
+    nationality = Column(String)
     account_id  = Column(BigInteger, unique=True)
 
     entries = relationship("PlayerEntry", back_populates="player")

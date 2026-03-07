@@ -85,8 +85,9 @@ def _parse_mode(name: str, series: str) -> str:
 
 def get_tournament(tournament_name: str, session) -> Tournament:
 
-    data = _get("tournament", {"conditions": f"[[pagename::{tournament_name}]]",
-                               "query": "pageid, name, seriespage, type, locations, format, startdate, enddate, liquipediatier"
+    data = _get("tournament", {
+                "conditions": f"[[pagename::{tournament_name}]]",
+                "query": "pageid, name, seriespage, type, locations, format, startdate, enddate, liquipediatier"
     })
 
     if not data:
@@ -119,8 +120,34 @@ def get_tournament(tournament_name: str, session) -> Tournament:
     print(f"Added tournament: {tournament.name}")
     return tournament
 
-def get_teams(tournament_name: str, session):
-    pass
+def get_teams_and_players(tournament_name: str, session):
+    data = _get("placement", {
+        "conditions": f"[[pagename::{tournament_name}]]",
+        "query": "opponentname, opponenttemplate, opponenttype, opponentplayers", 
+    })
+
+    print(json.dumps(data, indent=2))
+
+    placements = [p for p in data if p.get("opponenttype") == "team"]
+
+    teams = _get("team", {
+        "conditions": " OR ".join(f"[[pagename::{p['opponentname'].replace(' ', '_')}]]" for p in placements),
+        "query": "pageid, pagename, name",
+    })
+
+    print(json.dumps(teams, indent=2))
+
+    for p in placements:
+        team = Team(
+            liquipedia_id = next((t["pageid"] for t in teams if t["pagename"] == p["opponentname"].replace(" ", "_")), None),
+            name = p.get("opponentname"),
+        )
+        session.add(team)
+        
+    session.flush()
+    print(f"Added {len(placements)} teams")
+
+
 
 def sync_tournament(tournament_name: str):
     session = SessionLocal()
