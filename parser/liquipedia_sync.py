@@ -1,5 +1,6 @@
 import os
 import requests
+import json
 from dotenv import load_dotenv
 from db.models import Tournament, Team, Player
 from db.database import SessionLocal
@@ -40,11 +41,13 @@ def _get(endpoint: str, params: dict) -> list:
 def get_tournament(tournament_name: str, session) -> Tournament:
 
     data = _get("tournament", {"conditions": f"[[pagename::{tournament_name}]]",
-                               "query": "pageid, pagename, name, startdate, enddate"
+                               "query": "pageid, name, seriespage, type, locations, format, startdate, enddate, liquipediatier"
     })
 
     if not data:
         raise ValueError(f"Tournament not found: {tournament_name}")
+    
+    print(json.dumps(data, indent=2))
     
     item = data[0]
     existing = session.query(Tournament).filter_by(liquipedia_id=item["pageid"]).first()
@@ -55,13 +58,17 @@ def get_tournament(tournament_name: str, session) -> Tournament:
     tournament = Tournament(
         name=item["name"],
         liquipedia_id=item["pageid"],
-        start_date=item.get("startdate"),
-        end_date=item.get("enddate"),
+        series=item["seriespage"],
+        type=item["type"],
+        start_date=item["startdate"],
+        end_date=item["enddate"],
     )
     session.add(tournament)
     session.flush()  # to get tournament.id for foreign keys
     print(f"Added tournament: {tournament.name}")
     return tournament
+
+def get_teams(tournament_name: str, session):
 
 def sync_tournament(tournament_name: str):
     session = SessionLocal()

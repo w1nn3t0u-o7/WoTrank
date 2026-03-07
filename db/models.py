@@ -15,6 +15,10 @@ class Tournament(Base):
     id          = Column(Integer, primary_key=True)
     name        = Column(String, unique=True, nullable=False)
     liquipedia_id = Column(Integer, unique=True)
+    series      = Column(String)   # "WGL", "TCEU", etc.
+    type        = Column(String)   # Offline or Online
+    server      = Column(String)   # "EU", "NA", etc.
+    location    = Column(String)
     start_date  = Column(DateTime)
     end_date    = Column(DateTime)
 
