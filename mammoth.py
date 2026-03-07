@@ -2,7 +2,7 @@ import sys
 import json
 from pathlib import Path
 from db.database import engine, init_db, SessionLocal
-from db.models import Base
+from db.models import Base, Tournament
 from parser.replay_importer import import_replay, parse_replay_blocks
 from parser.liquipedia_sync import sync_tournament
 
@@ -87,6 +87,24 @@ def export_to_json(replay_path: str, output_path: str, block: str = None):
 def sync_liquipedia(tournament_name: str):
     sync_tournament(tournament_name)
 
+def set_tournament_mode(liquipedia_id: int, mode: str):
+    VALID_MODES = ("Standard", "Onslaught", "Attack/Defense")
+    if mode not in VALID_MODES:
+        print(f"Error: invalid mode: {mode}. Valid modes are: {', '.join(VALID_MODES)}")
+        sys.exit(1)
+
+    session = SessionLocal()
+    tournament = session.query(Tournament).filter_by(liquipedia_id=liquipedia_id).first()
+    if not tournament:
+        print(f"Error: tournament not found with Liquipedia ID: {liquipedia_id}")
+        session.close()
+        sys.exit(1)
+    tournament.mode = mode
+    session.commit()
+    session.close()
+    print(f"Updated tournament '{tournament.name}' (Liquipedia ID: {liquipedia_id}) with mode: {mode}")
+    
+
 
 COMMANDS = {
     "create":    (create_tables,   "Create tables"),
@@ -96,6 +114,7 @@ COMMANDS = {
     "importall": (import_directory,   "Import whole directory:  importall <path>"),
     "export":    (export_to_json,   "Export replay to JSON:  export <replay_path> <output_path> [block]"),
     "sync":      (sync_liquipedia, "Sync tournament from Liquipedia: sync <tournament_pagename>"),
+    "set-mode":   (set_tournament_mode, "Set tournament mode: set-mode <liquipedia_id> <mode>")
 }
 
 

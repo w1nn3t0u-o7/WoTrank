@@ -15,6 +15,8 @@ HEADERS = {
     "User-Agent": "mammoth (WoTrank) (contact: mzielniok@proton.me)"
 }
 
+# HELPER FUNCTIONS
+
 def _get(endpoint: str, params: dict) -> list:
     params.setdefault("wiki", WIKI)
     params.setdefault("limit", 100)
@@ -38,6 +40,49 @@ def _get(endpoint: str, params: dict) -> list:
 
     return results
 
+REGION_TO_SERVER = {
+    "Europe":        "EU",
+    "North America":  "NA",
+}
+
+def _parse_location(item: dict) -> tuple[str, str]:
+    locations = item.get("locations")
+    tournament_type = item.get("type")
+
+    if not locations:
+        return None, None
+
+    values = list(locations.values())
+
+    if tournament_type.lower() == "offline":
+        region = ", ".join(values)
+        return region, "World"
+    
+    known_regions = [v for v in values if v in REGION_TO_SERVER]
+    unknown_regions = [v for v in values if v not in REGION_TO_SERVER]
+
+    all_regions = known_regions + unknown_regions
+    region = ", ".join(all_regions)
+
+    if len(known_regions) > 1:
+        server = "World"
+    elif len(known_regions) == 1:
+        server = REGION_TO_SERVER[known_regions[0]]
+    else:
+        server = "Unknown"
+
+    return region, server
+
+def _parse_mode(name: str, series: str) -> str:
+    text = f"{name} {series or ''}".lower()
+    if "onslaught" in text:
+        return "Onslaught"
+    elif "clan showdown" in text:
+        return "Standard"
+    return None
+
+# PARSER FUNCTIONS
+
 def get_tournament(tournament_name: str, session) -> Tournament:
 
     data = _get("tournament", {"conditions": f"[[pagename::{tournament_name}]]",
@@ -56,19 +101,26 @@ def get_tournament(tournament_name: str, session) -> Tournament:
         return existing
     
     tournament = Tournament(
-        name=item["name"],
-        liquipedia_id=item["pageid"],
-        series=item["seriespage"],
-        type=item["type"],
-        start_date=item["startdate"],
-        end_date=item["enddate"],
+        liquipedia_id = item.get("pageid"),
+        name = item.get("name"),
+        series = item.get("seriespage"),
+        type = item.get("type"),
+        location = _parse_location(item)[0],
+        server = _parse_location(item)[1],
+        format = item.get("format"),
+        mode = _parse_mode(item.get("name"), item.get("seriespage")),
+        start_date = item.get("startdate"),
+        end_date = item.get("enddate"),
+        liquipedia_tier = item.get("liquipediatier")
     )
+
     session.add(tournament)
     session.flush()  # to get tournament.id for foreign keys
     print(f"Added tournament: {tournament.name}")
     return tournament
 
 def get_teams(tournament_name: str, session):
+    pass
 
 def sync_tournament(tournament_name: str):
     session = SessionLocal()

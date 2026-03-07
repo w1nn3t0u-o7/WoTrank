@@ -13,14 +13,17 @@ class Tournament(Base):
     __tablename__ = "tournaments"
 
     id          = Column(Integer, primary_key=True)
+    liquipedia_id = Column(Integer, unique=True, nullable=False)
     name        = Column(String, unique=True, nullable=False)
-    liquipedia_id = Column(Integer, unique=True)
-    series      = Column(String)   # "WGL", "TCEU", etc.
-    type        = Column(String)   # Offline or Online
-    server      = Column(String)   # "EU", "NA", etc.
+    series      = Column(String)   # "Onslaught Legends Cup" etc.
+    type        = Column(String, nullable=False)   # Offline or Online
     location    = Column(String)
-    start_date  = Column(DateTime)
-    end_date    = Column(DateTime)
+    server      = Column(String)   # "EU", "NA", etc.
+    format      = Column(String, nullable=False)    # 7v7, 15v15, etc.
+    mode        = Column(String)    # "Standard", "Onslaught", "Attack/Defense", etc.
+    start_date  = Column(DateTime, nullable=False)
+    end_date    = Column(DateTime, nullable=False)
+    liquipedia_tier = Column(String, nullable=False)  # "S", "A", "B", etc.
 
     matches = relationship("Match", back_populates="tournament")
 
