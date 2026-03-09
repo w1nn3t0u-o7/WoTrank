@@ -53,12 +53,16 @@ class Match(Base):
     __tablename__ = "matches"
 
     id               = Column(Integer, primary_key=True)
-    tournament_id     = Column(Integer, ForeignKey("tournaments.id"))
-    liquipedia_id    = Column(Integer, unique=True)
+    tournament_id    = Column(Integer, ForeignKey("tournaments.id"))
+    liquipedia_id    = Column(String, unique=True)
+    stage            = Column(String)   # "Group Stage", "Playoffs", etc.
+    round            = Column(String)   # "Round of 16", "Quarterfinals", etc.
     team1_id         = Column(Integer, ForeignKey("teams.id"))
+    team1_score      = Column(Integer)
     team2_id         = Column(Integer, ForeignKey("teams.id"))
+    team2_score      = Column(Integer)
     winner_team_id   = Column(Integer, ForeignKey("teams.id"))
-    stage            = Column(String)   # "Group Stage", "Quarterfinals", etc.
+    best_of          = Column(Integer)   # 1, 3, 5, etc.
     datetime         = Column(DateTime)
 
     tournament = relationship("Tournament", back_populates="matches")

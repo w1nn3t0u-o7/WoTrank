@@ -126,7 +126,7 @@ def get_matches(tournament_name: str, session):
         "query": "match2id, match2bracketid, match2bracketdata, match2opponents",
     })
 
-    # print(json.dumps(data[:5], indent=2))
+    print(json.dumps(data, indent=2))
 
     db_teams = {}
     db_players = {}
@@ -195,10 +195,10 @@ def get_matches(tournament_name: str, session):
 
         # print(json.dumps(team_pages, indent=2))
 
-        team_by_name = {t["name"]: t for t in team_pages}
+        teams_by_name = {t["name"]: t for t in team_pages}
 
         for team in db_teams.values():
-            page = team_by_name.get(team.name)
+            page = teams_by_name.get(team.name)
             if page:
                 team.liquipedia_id = page["pageid"]
                 team.template = page["template"]
@@ -220,10 +220,10 @@ def get_matches(tournament_name: str, session):
 
         # print(json.dumps(player_pages[:3], indent=2))
 
-        player_by_name = {p["pagename"]: p for p in player_pages}
+        players_by_name = {p["pagename"]: p for p in player_pages}
 
         for player in db_players.values():
-            page = player_by_name.get(player.page_name)
+            page = players_by_name.get(player.page_name)
             if page:
                 player.liquipedia_id = page["pageid"]
                 player.name = page["id"]
