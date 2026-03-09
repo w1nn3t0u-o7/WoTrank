@@ -33,13 +33,17 @@ class Team(Base):
     id          = Column(Integer, primary_key=True)
     liquipedia_id = Column(Integer, unique=True)
     name        = Column(String, unique=True, nullable=False)
+    template = Column(String, unique=True, nullable=False)
+    
 
 class Player(Base):
     __tablename__ = "players"
 
     id          = Column(Integer, primary_key=True)
     liquipedia_id = Column(Integer, unique=True)
-    name        = Column(String, unique=True, nullable=False)
+    page_name        = Column(String, unique=True, nullable=False)
+    name = Column(String)
+    alternate_names = Column(String)  # comma-separated list of alternate names
     nationality = Column(String)
     account_id  = Column(BigInteger, unique=True)
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from db.database import engine, init_db, SessionLocal
 from db.models import Base, Tournament
 from parser.replay_importer import import_replay, parse_replay_blocks
-from parser.liquipedia_sync import get_teams_and_players, sync_tournament
+from parser.liquipedia_sync import get_matches, sync_tournament
 
 
 def create_tables():
@@ -85,8 +85,9 @@ def export_to_json(replay_path: str, output_path: str, block: str = None):
         print(json_str)
 
 def sync_liquipedia(tournament_name: str):
-    # sync_tournament(tournament_name)
-    get_teams_and_players(tournament_name)
+    sync_tournament(tournament_name)
+    # get_teams_and_players(tournament_name)
+    # get_matches(tournament_name)
 
 def set_tournament_mode(liquipedia_id: int, mode: str):
     VALID_MODES = ("Standard", "Onslaught", "Attack/Defense")

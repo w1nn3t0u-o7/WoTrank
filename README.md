@@ -6,7 +6,5 @@
 - [x] Add server field besides location that will derive info from location
 - [ ] Add function that will populate matches, teams and players tables
 - [ ] Add MVP column to the tournaments table extarcted from the placements
-- [ ] Nationality for teams?
-- [ ] Figure out lookups
 
 
