@@ -42,7 +42,7 @@ class Player(Base):
 
     id          = Column(Integer, primary_key=True)
     liquipedia_id = Column(Integer, unique=True)
-    page_name        = Column(String, unique=True, nullable=False)
+    pagename        = Column(String, unique=True, nullable=False)
     name = Column(String)
     alternate_names = Column(String)  # comma-separated list of alternate names
     nationality = Column(String)
@@ -67,39 +67,61 @@ class Match(Base):
     datetime         = Column(DateTime)
 
     tournament = relationship("Tournament", back_populates="matches")
-    rounds = relationship("Round", back_populates="match")
+    map_games = relationship("MapGame", back_populates="match")
+    map_vetos = relationship("MapVeto", back_populates="match")
 
-class Round(Base):
-    __tablename__ = "rounds"
+class MapVeto(Base):
+    __tablename__ = "map_vetos"
 
     id               = Column(Integer, primary_key=True)
     match_id         = Column(Integer, ForeignKey("matches.id"))
-    round_number     = Column(Integer)   # 1, 2, 3, etc.
-    arena_unique_id  = Column(String, unique=True, nullable=False)  # deduplication key
-    replay_file      = Column(String)
-    date_time        = Column(DateTime)
-    map_name         = Column(String)
-    map_display_name = Column(String)
-    gameplay_id      = Column(String)
-    battle_type      = Column(Integer)
-    bonus_type       = Column(Integer)   # 14 = CW/tournament
-    duration_sec     = Column(Integer)
+    team_id          = Column(Integer, ForeignKey("teams.id"))
+    map              = Column(String)
+    type             = Column(String)    # "ban" or "pick"
+    order            = Column(Integer)   # 1, 2, 3, etc.
+
+    match = relationship("Match", back_populates="map_vetos")
+
+class MapGame(Base):
+    __tablename__ = "map_games"
+
+    id               = Column(Integer, primary_key=True)
+    match_id         = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    game_index       = Column(Integer)   # 0, 1, 2, etc.
+    map              = Column(String, nullable=False)
+    veto_id          = Column(Integer, ForeignKey("map_vetos.id"), nullable=True)
+    team1_score      = Column(Integer)
+    team2_score      = Column(Integer)
+    winner           = Column(Integer)   # 1 or 2 or 0 for draw
+    result_type      = Column(String)    # "draw" or "np", where "np" = not played, None if won by score
+    vod_url          = Column(String)
+
+    match = relationship("Match", back_populates="map_games")
+    games = relationship("Game", back_populates="map_game")
+
+class Game(Base):
+    __tablename__ = "games"
+
+    id               = Column(Integer, primary_key=True)
+    map_game_id      = Column(Integer, ForeignKey("map_games.id"))
+    # round_number     = Column(Integer)   # 1, 2, 3, etc.
+    arena_unique_id  = Column(String, unique=True)  # deduplication key, from the replay
+    date_time        = Column(DateTime) # from the replay
+    duration         = Column(Integer) # from the replay
     winner_team      = Column(Integer)
     wot_version      = Column(String)
-    server_name      = Column(String)
-    recorder_name    = Column(String)
-    recorder_id      = Column(BigInteger)
     source           = Column(String, default="replay")  # "replay" | "manual"
+    replay_file      = Column(String)
 
-    match = relationship("Match", back_populates="rounds")
-    entries = relationship("PlayerEntry", back_populates="round")
+    map_game = relationship("MapGame", back_populates="games")
+    entries = relationship("PlayerEntry", back_populates="game")
 
 
 class PlayerEntry(Base):
     __tablename__ = "player_entries"
 
     id         = Column(Integer, primary_key=True)
-    round_id   = Column(Integer, ForeignKey("rounds.id"), nullable=False)
+    game_id    = Column(Integer, ForeignKey("games.id"), nullable=False)
     match_id   = Column(Integer, ForeignKey("matches.id"))
     player_id  = Column(Integer, ForeignKey("players.id"))
 
@@ -146,5 +168,5 @@ class PlayerEntry(Base):
     # Data quality
     source = Column(String, default="replay")   # "replay" | "manual"
 
-    round = relationship("Round", back_populates="entries")
+    game = relationship("Game", back_populates="entries")
     player = relationship("Player", back_populates="entries")

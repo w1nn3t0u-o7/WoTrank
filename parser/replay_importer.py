@@ -2,7 +2,7 @@ import json
 import struct
 import datetime
 from pathlib import Path
-from db.models import Match, PlayerEntry, Round
+from db.models import Match, PlayerEntry, Game
 
 MAGIC_NUM = b"\x12\x32\x34\x11"
 OBSERVER_VEHICLE = "ussr:Observer"
@@ -25,7 +25,7 @@ def parse_replay_blocks(replay_path: str) -> list:
     return blocks
 
 
-def build_round(block0: dict, common: dict, arena_id: str, replay_file: str) -> dict:
+def build_game(block0: dict, common: dict, arena_id: str, replay_file: str) -> dict:
     raw_date = block0.get("dateTime", "")
     try:
         dt = datetime.datetime.strptime(raw_date, "%d.%m.%Y %H:%M:%S")
@@ -133,24 +133,24 @@ def import_replay(replay_path: str, session) -> int:
     arena_id = str(results.get("arenaUniqueID", ""))
 
     # Deduplication: skip if already imported
-    existing = session.query(Round).filter_by(arena_unique_id=arena_id).first()
+    existing = session.query(Game).filter_by(arena_unique_id=arena_id).first()
     if existing:
         print(f"  Already imported: arena {arena_id}")
         return None
 
     # Build and insert match
-    match_data = build_round(block0, results["common"], arena_id, replay_path)
-    round = Round(**match_data)
-    session.add(round)
-    session.flush()  # get round.id before inserting entries
+    match_data = build_game(block0, results["common"], arena_id, replay_path)
+    game = Game(**match_data)
+    session.add(game)
+    session.flush()  # get game.id before inserting entries
 
     # Build and insert player entries
     entries = build_player_entries(results, roster, frags)
     for entry_data in entries:
-        entry = PlayerEntry(round_id=round.id, **entry_data)
+        entry = PlayerEntry(game_id=game.id, **entry_data)
         session.add(entry)
 
     session.commit()
-    print(f"  Imported round {round.id}: {round.map_display_name} "
-          f"({len(entries)} players, winner team {round.winner_team})")
-    return round.id
+    print(f"  Imported game {game.id}: {game.arena_unique_id} "
+          f"({len(entries)} players, winner team {game.winner_team})")
+    return game.id

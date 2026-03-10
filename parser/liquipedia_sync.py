@@ -114,7 +114,6 @@ def _parse_round(bracket_data: dict) -> str:
         return None
 
 
-
 # PARSER FUNCTIONS
 
 def get_tournament(tournament_pagename: str, session) -> Tournament:
@@ -159,11 +158,12 @@ def get_tournament(tournament_pagename: str, session) -> Tournament:
 def get_matches(tournament: Tournament, session):
     data = _get("match", {
         "conditions": f"[[pagename::{tournament.pagename}]]",
-        "query": "match2id, match2bracketid, match2bracketdata, match2opponents, section, winner, bestof, date",
+        "query": "match2id, match2bracketid, match2bracketdata, match2opponents, match2games, section, winner, bestof, date, extradata",
     })
 
-    for bracket in data:
-        print(json.dumps(bracket.get("match2bracketdata"), indent=2))
+    # for bracket in data:
+    #     print(json.dumps(bracket.get("match2bracketdata"), indent=2))
+    print(json.dumps(data[-1], indent=2))
 
     db_teams = {}
     db_players = {}
@@ -204,10 +204,10 @@ def get_matches(tournament: Tournament, session):
                 if player_name in db_players:
                     continue
 
-                player = session.query(Player).filter_by(page_name=player_name).first()
+                player = session.query(Player).filter_by(pagename=player_name).first()
                 if not player:
                     player = Player(
-                        page_name = player_name,
+                        pagename = player_name,
                         name = p.get("displayname"),
                         nationality = p.get("flag"),
                     )
@@ -246,7 +246,7 @@ def get_matches(tournament: Tournament, session):
         session.flush()
 
     # Match players to Liquipedia pages by name
-    player_names = [player.page_name for player in db_players.values() if player.page_name]
+    player_names = [player.pagename for player in db_players.values() if player.pagename]
 
     if player_names:
         conditions = " OR ".join(f"[[pagename::{n}]]" for n in player_names)
@@ -260,18 +260,19 @@ def get_matches(tournament: Tournament, session):
         players_by_name = {p["pagename"]: p for p in player_pages}
 
         for player in db_players.values():
-            page = players_by_name.get(player.page_name)
+            page = players_by_name.get(player.pagename)
             if page:
                 player.liquipedia_id = page["pageid"]
                 player.name = page["id"]
                 player.alternate_names = page["alternateid"]
                 player.nationality = page["nationality"]
-                print(f"  Updated player {player.page_name} with Liquipedia ID: {player.liquipedia_id}")
+                print(f"  Updated player {player.pagename} with Liquipedia ID: {player.liquipedia_id}")
             else:
-                print(f"  No Liquipedia page found for player: {player.page_name}")
+                print(f"  No Liquipedia page found for player: {player.pagename}")
 
         session.flush()
-        
+    
+    # Now insert matches
     for m in data:
         opponents = m.get("match2opponents", [])
         if len(opponents) != 2:
