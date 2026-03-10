@@ -14,6 +14,7 @@ class Tournament(Base):
 
     id          = Column(Integer, primary_key=True)
     liquipedia_id = Column(Integer, unique=True, nullable=False)
+    pagename     = Column(String, unique=True, nullable=False)
     name        = Column(String, unique=True, nullable=False)
     series      = Column(String)   # "Onslaught Legends Cup" etc.
     type        = Column(String, nullable=False)   # Offline or Online
@@ -57,12 +58,12 @@ class Match(Base):
     liquipedia_id    = Column(String, unique=True)
     stage            = Column(String)   # "Group Stage", "Playoffs", etc.
     round            = Column(String)   # "Round of 16", "Quarterfinals", etc.
+    best_of          = Column(Integer)   # 1, 3, 5, etc.
     team1_id         = Column(Integer, ForeignKey("teams.id"))
     team1_score      = Column(Integer)
     team2_id         = Column(Integer, ForeignKey("teams.id"))
     team2_score      = Column(Integer)
     winner_team_id   = Column(Integer, ForeignKey("teams.id"))
-    best_of          = Column(Integer)   # 1, 3, 5, etc.
     datetime         = Column(DateTime)
 
     tournament = relationship("Tournament", back_populates="matches")

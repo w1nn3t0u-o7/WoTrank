@@ -2,7 +2,7 @@ import os
 import requests
 import json
 from dotenv import load_dotenv
-from db.models import Tournament, Team, Player
+from db.models import Match, Tournament, Team, Player
 from db.database import SessionLocal
 
 load_dotenv()
@@ -40,10 +40,12 @@ def _get(endpoint: str, params: dict) -> list:
 
     return results
 
+
 REGION_TO_SERVER = {
     "Europe":        "EU",
     "North America":  "NA",
 }
+
 
 def _parse_location(item: dict) -> tuple[str, str]:
     locations = item.get("locations")
@@ -73,6 +75,7 @@ def _parse_location(item: dict) -> tuple[str, str]:
 
     return region, server
 
+
 def _parse_mode(name: str, series: str) -> str:
     text = f"{name} {series or ''}".lower()
     if "onslaught" in text:
@@ -81,17 +84,21 @@ def _parse_mode(name: str, series: str) -> str:
         return "Standard"
     return None
 
+
+
+
+
 # PARSER FUNCTIONS
 
-def get_tournament(tournament_name: str, session) -> Tournament:
+def get_tournament(tournament_pagename: str, session) -> Tournament:
 
     data = _get("tournament", {
-                "conditions": f"[[pagename::{tournament_name}]]",
+                "conditions": f"[[pagename::{tournament_pagename}]]",
                 "query": "pageid, name, seriespage, type, locations, format, startdate, enddate, liquipediatier"
     })
 
     if not data:
-        raise ValueError(f"Tournament not found: {tournament_name}")
+        raise ValueError(f"Tournament not found: {tournament_pagename}")
     
     # print(json.dumps(data, indent=2))
     
@@ -103,6 +110,7 @@ def get_tournament(tournament_name: str, session) -> Tournament:
     
     tournament = Tournament(
         liquipedia_id = item.get("pageid"),
+        pagename = tournament_pagename,
         name = item.get("name"),
         series = item.get("seriespage"),
         type = item.get("type"),
@@ -120,13 +128,14 @@ def get_tournament(tournament_name: str, session) -> Tournament:
     print(f"Added tournament: {tournament.name}")
     return tournament
 
-def get_matches(tournament_name: str, session):
+
+def get_matches(tournament: Tournament, session):
     data = _get("match", {
-        "conditions": f"[[pagename::{tournament_name}]]",
-        "query": "match2id, match2bracketid, match2bracketdata, match2opponents",
+        "conditions": f"[[pagename::{tournament.pagename}]]",
+        "query": "match2id, match2bracketid, match2bracketdata, match2opponents, section, winner, bestof, date",
     })
 
-    print(json.dumps(data, indent=2))
+    print(json.dumps(data[:1], indent=2))
 
     db_teams = {}
     db_players = {}
@@ -234,12 +243,48 @@ def get_matches(tournament_name: str, session):
                 print(f"  No Liquipedia page found for player: {player.page_name}")
 
         session.flush()
+        
+    for m in data:
+        opponents = m.get("match2opponents", [])
+        if len(opponents) != 2:
+            continue
 
-def sync_tournament(tournament_name: str):
+        if session.query(Match).filter_by(liquipedia_id=m["match2id"]).first():
+            print(f"  Match already exists: {m['match2id']}")
+            continue
+
+        opp1, opp2 = opponents
+        team1 = db_teams.get(opp1.get("name"))
+        team2 = db_teams.get(opp2.get("name"))
+        winner_idx = str(m.get("winner"))
+        winner = team1 if winner_idx == "1" else team2 if winner_idx == "2" else None
+
+        bracket_data = m.get("match2bracketdata", {})
+
+        match = Match(
+            tournament_id = tournament.id,
+            liquipedia_id = m.get("match2id"),
+            stage = m.get("section"),
+            # round = bracket_data.get("round"),
+            best_of = m.get("bestof"),
+            team1_id = team1.id if team1 else None,
+            team1_score = opp1.get("score"),
+            team2_id = team2.id if team2 else None,
+            team2_score = opp2.get("score"),
+            winner_team_id = winner.id if winner else None,
+            datetime = m.get("date"),
+        )
+        session.add(match)
+        print(f"  Added match: {opp1.get('name')} vs {opp2.get('name')}")
+
+    session.flush()
+
+
+def sync_tournament(tournament_pagename: str):
     session = SessionLocal()
     try:
-        tournament = get_tournament(tournament_name, session)
-        get_matches(tournament_name, session)
+        tournament = get_tournament(tournament_pagename, session)
+        get_matches(tournament, session)
         session.commit()
         print(f"Synchronized tournament: {tournament.name}")
     except Exception as e:

@@ -84,8 +84,8 @@ def export_to_json(replay_path: str, output_path: str, block: str = None):
     else:
         print(json_str)
 
-def sync_liquipedia(tournament_name: str):
-    sync_tournament(tournament_name)
+def sync_liquipedia(tournament_pagename: str):
+    sync_tournament(tournament_pagename)
     # get_teams_and_players(tournament_name)
     # get_matches(tournament_name)
 
