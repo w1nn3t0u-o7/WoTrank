@@ -46,6 +46,15 @@ REGION_TO_SERVER = {
     "North America":  "NA",
 }
 
+DEPTH_TO_ROUND = {
+    0: "Grand Final",
+    1: "Final",
+    2: "Semifinal",
+    3: "Quarterfinal",
+    4: "Round 1",
+    5: "Round 2",
+}
+
 
 def _parse_location(item: dict) -> tuple[str, str]:
     locations = item.get("locations")
@@ -85,6 +94,24 @@ def _parse_mode(name: str, series: str) -> str:
     return None
 
 
+def _parse_round(bracket_data: dict) -> str:
+    # Right now it works for brackets 4U4L1D and 8L4DS-2Q-U-8L2D-4QL
+    coordinates = bracket_data.get("coordinates")
+    section = bracket_data.get("bracketsection")
+    depth = int(coordinates.get("semanticDepth"))
+
+    if depth == 0:
+        return "Grand Final"
+    elif depth == 1:
+        return f"{section} Bracket Final"
+    elif depth == 2:
+        return f"{section} Bracket Semifinal"
+    elif depth == 3:
+        return f"{section} Bracket Quarterfinal"
+    elif depth >= 4:
+        return f"{section} Bracket Round {depth - 3}"
+    else:
+        return None
 
 
 
@@ -135,7 +162,8 @@ def get_matches(tournament: Tournament, session):
         "query": "match2id, match2bracketid, match2bracketdata, match2opponents, section, winner, bestof, date",
     })
 
-    print(json.dumps(data[:1], indent=2))
+    for bracket in data:
+        print(json.dumps(bracket.get("match2bracketdata"), indent=2))
 
     db_teams = {}
     db_players = {}
@@ -265,7 +293,7 @@ def get_matches(tournament: Tournament, session):
             tournament_id = tournament.id,
             liquipedia_id = m.get("match2id"),
             stage = m.get("section"),
-            # round = bracket_data.get("round"),
+            round = _parse_round(bracket_data),
             best_of = m.get("bestof"),
             team1_id = team1.id if team1 else None,
             team1_score = opp1.get("score"),
