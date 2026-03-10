@@ -12,10 +12,11 @@ WIKI = "worldoftanks"
 HEADERS = {
     "Authorization": f"Apikey {os.getenv('LIQUIPEDIA_API_KEY')}",
     "Accept-Encoding": "gzip",
-    "User-Agent": "mammoth (WoTrank) (contact: mzielniok@proton.me)"
+    "User-Agent": "mammoth (WoTrank) (contact: mzielniok@proton.me)",
 }
 
 # HELPER FUNCTIONS
+
 
 def _get(endpoint: str, params: dict) -> list:
     params.setdefault("wiki", WIKI)
@@ -24,13 +25,15 @@ def _get(endpoint: str, params: dict) -> list:
 
     results = []
     while True:
-        response = requests.get(f"{BASE_URL}/{endpoint}", headers=HEADERS, params=params)
+        response = requests.get(
+            f"{BASE_URL}/{endpoint}", headers=HEADERS, params=params
+        )
         response.raise_for_status()
         data = response.json()
 
         if "error" in data:
             raise ValueError(f"Liquipedia API error: {data['error']}")
-        
+
         page = data.get("result", [])
         results.extend(page)
 
@@ -42,17 +45,8 @@ def _get(endpoint: str, params: dict) -> list:
 
 
 REGION_TO_SERVER = {
-    "Europe":        "EU",
-    "North America":  "NA",
-}
-
-DEPTH_TO_ROUND = {
-    0: "Grand Final",
-    1: "Final",
-    2: "Semifinal",
-    3: "Quarterfinal",
-    4: "Round 1",
-    5: "Round 2",
+    "Europe": "EU",
+    "North America": "NA",
 }
 
 
@@ -68,7 +62,7 @@ def _parse_location(item: dict) -> tuple[str, str]:
     if tournament_type.lower() == "offline":
         region = ", ".join(values)
         return region, "World"
-    
+
     known_regions = [v for v in values if v in REGION_TO_SERVER]
     unknown_regions = [v for v in values if v not in REGION_TO_SERVER]
 
@@ -116,37 +110,41 @@ def _parse_round(bracket_data: dict) -> str:
 
 # PARSER FUNCTIONS
 
+
 def get_tournament(tournament_pagename: str, session) -> Tournament:
 
-    data = _get("tournament", {
-                "conditions": f"[[pagename::{tournament_pagename}]]",
-                "query": "pageid, name, seriespage, type, locations, format, startdate, enddate, liquipediatier"
-    })
+    data = _get(
+        "tournament",
+        {
+            "conditions": f"[[pagename::{tournament_pagename}]]",
+            "query": "pageid, name, seriespage, type, locations, format, startdate, enddate, liquipediatier",
+        },
+    )
 
     if not data:
         raise ValueError(f"Tournament not found: {tournament_pagename}")
-    
+
     # print(json.dumps(data, indent=2))
-    
+
     item = data[0]
     existing = session.query(Tournament).filter_by(liquipedia_id=item["pageid"]).first()
     if existing:
         print(f"  Tournament already exists: {existing.name}")
         return existing
-    
+
     tournament = Tournament(
-        liquipedia_id = item.get("pageid"),
-        pagename = tournament_pagename,
-        name = item.get("name"),
-        series = item.get("seriespage"),
-        type = item.get("type"),
-        location = _parse_location(item)[0],
-        server = _parse_location(item)[1],
-        format = item.get("format"),
-        mode = _parse_mode(item.get("name"), item.get("seriespage")),
-        start_date = item.get("startdate"),
-        end_date = item.get("enddate"),
-        liquipedia_tier = item.get("liquipediatier")
+        liquipedia_id=item.get("pageid"),
+        pagename=tournament_pagename,
+        name=item.get("name"),
+        series=item.get("seriespage"),
+        type=item.get("type"),
+        location=_parse_location(item)[0],
+        server=_parse_location(item)[1],
+        format=item.get("format"),
+        mode=_parse_mode(item.get("name"), item.get("seriespage")),
+        start_date=item.get("startdate"),
+        end_date=item.get("enddate"),
+        liquipedia_tier=item.get("liquipediatier"),
     )
 
     session.add(tournament)
@@ -156,10 +154,13 @@ def get_tournament(tournament_pagename: str, session) -> Tournament:
 
 
 def get_matches(tournament: Tournament, session):
-    data = _get("match", {
-        "conditions": f"[[pagename::{tournament.pagename}]]",
-        "query": "match2id, match2bracketid, match2bracketdata, match2opponents, match2games, section, winner, bestof, date, extradata",
-    })
+    data = _get(
+        "match",
+        {
+            "conditions": f"[[pagename::{tournament.pagename}]]",
+            "query": "match2id, match2bracketid, match2bracketdata, match2opponents, match2games, section, winner, bestof, date, extradata",
+        },
+    )
 
     # for bracket in data:
     #     print(json.dumps(bracket.get("match2bracketdata"), indent=2))
@@ -171,7 +172,9 @@ def get_matches(tournament: Tournament, session):
     for m in data:
         opponents = m.get("match2opponents", [])
         if len(opponents) != 2:
-            print(f"  Skipping match {m.get('match2id')} with {len(opponents)} opponents")
+            print(
+                f"  Skipping match {m.get('match2id')} with {len(opponents)} opponents"
+            )
             continue
 
         # Upsert teams
@@ -185,8 +188,8 @@ def get_matches(tournament: Tournament, session):
             team = session.query(Team).filter_by(name=team_name).first()
             if not team:
                 team = Team(
-                    template = team_template,
-                    name = team_name,
+                    template=team_template,
+                    name=team_name,
                 )
 
                 session.add(team)
@@ -207,9 +210,9 @@ def get_matches(tournament: Tournament, session):
                 player = session.query(Player).filter_by(pagename=player_name).first()
                 if not player:
                     player = Player(
-                        pagename = player_name,
-                        name = p.get("displayname"),
-                        nationality = p.get("flag"),
+                        pagename=player_name,
+                        name=p.get("displayname"),
+                        nationality=p.get("flag"),
                     )
 
                     session.add(player)
@@ -225,10 +228,13 @@ def get_matches(tournament: Tournament, session):
 
     if team_names:
         conditions = " OR ".join(f"[[name::{n}]]" for n in team_names)
-        team_pages = _get("team", {
-            "conditions": conditions,
-            "query": "pagename, pageid, name, template",
-        })
+        team_pages = _get(
+            "team",
+            {
+                "conditions": conditions,
+                "query": "pagename, pageid, name, template",
+            },
+        )
 
         # print(json.dumps(team_pages, indent=2))
 
@@ -239,21 +245,28 @@ def get_matches(tournament: Tournament, session):
             if page:
                 team.liquipedia_id = page["pageid"]
                 team.template = page["template"]
-                print(f"  Updated team {team.name} with Liquipedia ID: {team.liquipedia_id}")
+                print(
+                    f"  Updated team {team.name} with Liquipedia ID: {team.liquipedia_id}"
+                )
             else:
                 print(f"  No Liquipedia page found for team: {team.name}")
 
         session.flush()
 
     # Match players to Liquipedia pages by name
-    player_names = [player.pagename for player in db_players.values() if player.pagename]
+    player_names = [
+        player.pagename for player in db_players.values() if player.pagename
+    ]
 
     if player_names:
         conditions = " OR ".join(f"[[pagename::{n}]]" for n in player_names)
-        player_pages = _get("player", {
-            "conditions": conditions,
-            "query": "pagename, pageid, id, alternateid, nationality",
-        })
+        player_pages = _get(
+            "player",
+            {
+                "conditions": conditions,
+                "query": "pagename, pageid, id, alternateid, nationality",
+            },
+        )
 
         # print(json.dumps(player_pages[:3], indent=2))
 
@@ -266,12 +279,14 @@ def get_matches(tournament: Tournament, session):
                 player.name = page["id"]
                 player.alternate_names = page["alternateid"]
                 player.nationality = page["nationality"]
-                print(f"  Updated player {player.pagename} with Liquipedia ID: {player.liquipedia_id}")
+                print(
+                    f"  Updated player {player.pagename} with Liquipedia ID: {player.liquipedia_id}"
+                )
             else:
                 print(f"  No Liquipedia page found for player: {player.pagename}")
 
         session.flush()
-    
+
     # Now insert matches
     for m in data:
         opponents = m.get("match2opponents", [])
@@ -291,17 +306,17 @@ def get_matches(tournament: Tournament, session):
         bracket_data = m.get("match2bracketdata", {})
 
         match = Match(
-            tournament_id = tournament.id,
-            liquipedia_id = m.get("match2id"),
-            stage = m.get("section"),
-            round = _parse_round(bracket_data),
-            best_of = m.get("bestof"),
-            team1_id = team1.id if team1 else None,
-            team1_score = opp1.get("score"),
-            team2_id = team2.id if team2 else None,
-            team2_score = opp2.get("score"),
-            winner_team_id = winner.id if winner else None,
-            datetime = m.get("date"),
+            tournament_id=tournament.id,
+            liquipedia_id=m.get("match2id"),
+            stage=m.get("section"),
+            round=_parse_round(bracket_data),
+            best_of=m.get("bestof"),
+            team1_id=team1.id if team1 else None,
+            team1_score=opp1.get("score"),
+            team2_id=team2.id if team2 else None,
+            team2_score=opp2.get("score"),
+            winner_team_id=winner.id if winner else None,
+            datetime=m.get("date"),
         )
         session.add(match)
         print(f"  Added match: {opp1.get('name')} vs {opp2.get('name')}")
