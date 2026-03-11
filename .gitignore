@@ -1,5 +1,4 @@
 *.xlsx
-*.json
 venv/
 *.wotreplay
 *.db
