@@ -308,23 +308,23 @@ def _upsert_map_games(
     m: dict, match: Match, vetos_by_order: dict[int, MapVeto], session
 ) -> None:
     """Insert map game entries, optionally linking to their corresponding map veto."""
-    for i, game in enumerate(m.get("match2games", [])):
-        scores = game.get("scores", [None, None])
-        picks = [v for v in vetos_by_order.values() if v.type == "pick"]
-        veto = picks[i] if i < len(picks) else None
+    veto_by_map = {v.map: v for v in vetos_by_order.values()}
+
+    for i, game in enumerate(m.get("match2games", []), start=1):
+        scores = game.get("scores", [])
+        winner_raw = game.get("winner")
+        map_name = game.get("map") or ""
 
         map_game = MapGame(
             match_id=match.id,
             game_index=i,
-            map=game.get("map") or "",
-            veto_id=veto.id if veto else None,
-            team1_score=scores[0] if scores else None,
-            team2_score=scores[1] if scores else None,
-            winner_index=(
-                int(game.get("winner")) if game.get("winner") else None
-            ),  # updated to match new column name
-            result_type=game.get("resulttype"),
-            vod_url=game.get("vod"),
+            map=map_name,
+            veto_id=veto_by_map[map_name].id if map_name in veto_by_map else None,
+            team1_score=scores[0] if len(scores) > 0 else None,
+            team2_score=scores[1] if len(scores) > 1 else None,
+            winner_index=int(winner_raw) if winner_raw and winner_raw.strip() else None,
+            result_type=game.get("resulttype") or None,
+            vod_url=game.get("vod") or None,
         )
         session.add(map_game)
 
@@ -395,7 +395,7 @@ def get_matches(tournament: Tournament, session):
         if match is None:
             continue
         vetos_by_order = _upsert_map_vetos(m, match, db_teams, session)
-        # _upsert_map_games(m, match, vetos_by_order, session)
+        _upsert_map_games(m, match, vetos_by_order, session)
 
 
 # Sync entry point
