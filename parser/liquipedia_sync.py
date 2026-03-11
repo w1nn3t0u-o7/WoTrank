@@ -91,6 +91,8 @@ def _parse_mode(name: str, series: str) -> str:
 def _parse_round(bracket_data: dict) -> str:
     # Right now it works for brackets 4U4L1D and 8L4DS-2Q-U-8L2D-4QL
     coordinates = bracket_data.get("coordinates")
+    if not coordinates:
+        return None
     section = bracket_data.get("bracketsection")
     depth = int(coordinates.get("semanticDepth"))
 
@@ -131,6 +133,8 @@ def get_tournament(tournament_pagename: str, session) -> Tournament:
     if existing:
         print(f"  Tournament already exists: {existing.name}")
         return existing
+    
+    location, server = _parse_location(item)
 
     tournament = Tournament(
         liquipedia_id=item.get("pageid"),
@@ -138,8 +142,8 @@ def get_tournament(tournament_pagename: str, session) -> Tournament:
         name=item.get("name"),
         series=item.get("seriespage"),
         type=item.get("type"),
-        location=_parse_location(item)[0],
-        server=_parse_location(item)[1],
+        location=location,
+        server=server,
         format=item.get("format"),
         mode=_parse_mode(item.get("name"), item.get("seriespage")),
         start_date=item.get("startdate"),
@@ -315,8 +319,8 @@ def get_matches(tournament: Tournament, session):
             team1_score=opp1.get("score"),
             team2_id=team2.id if team2 else None,
             team2_score=opp2.get("score"),
-            winner_team_id=winner.id if winner else None,
-            datetime=m.get("date"),
+            winner_id=winner.id if winner else None,
+            date_time=m.get("date"),
         )
         session.add(match)
         print(f"  Added match: {opp1.get('name')} vs {opp2.get('name')}")

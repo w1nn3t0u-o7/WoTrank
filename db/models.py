@@ -1,12 +1,13 @@
 from datetime import datetime
+
 from sqlalchemy import (
-    Column,
-    Integer,
     BigInteger,
-    String,
     Boolean,
+    Column,
     DateTime,
     ForeignKey,
+    Integer,
+    String,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -43,6 +44,11 @@ class Team(Base):
     name = Column(String, unique=True, nullable=False)
     template = Column(String, unique=True, nullable=False)
 
+    map_vetos = relationship("MapVeto", back_populates="team")
+    team1_matches = relationship("Match", back_populates="team1", foreign_keys="Match.team1_id")
+    team2_matches = relationship("Match", back_populates="team2", foreign_keys="Match.team2_id")
+    won_matches = relationship("Match", back_populates="winner", foreign_keys="Match.winner_id")
+
 
 class Player(Base):
     __tablename__ = "players"
@@ -71,12 +77,16 @@ class Match(Base):
     team1_score = Column(Integer)
     team2_id = Column(Integer, ForeignKey("teams.id"))
     team2_score = Column(Integer)
-    winner_team_id = Column(Integer, ForeignKey("teams.id"))
-    datetime = Column(DateTime)
+    winner_id = Column(Integer, ForeignKey("teams.id"))
+    date_time = Column(DateTime)
 
     tournament = relationship("Tournament", back_populates="matches")
     map_games = relationship("MapGame", back_populates="match")
     map_vetos = relationship("MapVeto", back_populates="match")
+
+    team1 = relationship("Team", back_populates="team1_matches", foreign_keys=[team1_id])
+    team2 = relationship("Team", back_populates="team2_matches", foreign_keys=[team2_id])
+    winner = relationship("Team", back_populates="won_matches", foreign_keys=[winner_id])
 
 
 class MapVeto(Base):
@@ -90,6 +100,8 @@ class MapVeto(Base):
     order = Column(Integer)  # 1, 2, 3, etc.
 
     match = relationship("Match", back_populates="map_vetos")
+    team = relationship("Team", back_populates="map_vetos")
+    map_game = relationship("MapGame", back_populates="map_veto", uselist=False) # one-to-one relationship, a veto can be linked to at most one map game
 
 
 class MapGame(Base):
@@ -102,7 +114,7 @@ class MapGame(Base):
     veto_id = Column(Integer, ForeignKey("map_vetos.id"), nullable=True)
     team1_score = Column(Integer)
     team2_score = Column(Integer)
-    winner = Column(Integer)  # 1 or 2 or 0 for draw
+    winner_index = Column(Integer)  # 1 or 2 or 0 for draw
     result_type = Column(
         String
     )  # "draw" or "np", where "np" = not played, None if won by score
@@ -110,6 +122,7 @@ class MapGame(Base):
 
     match = relationship("Match", back_populates="map_games")
     games = relationship("Game", back_populates="map_game")
+    map_veto = relationship("MapVeto", back_populates="map_game")
 
 
 class Game(Base):
@@ -135,7 +148,6 @@ class PlayerEntry(Base):
 
     id = Column(Integer, primary_key=True)
     game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
-    match_id = Column(Integer, ForeignKey("matches.id"))
     player_id = Column(Integer, ForeignKey("players.id"))
 
     # Identity (filled from block0 vehicles / block1 roster + players dict)
