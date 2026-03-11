@@ -2,7 +2,7 @@ import os
 import requests
 import json
 from dotenv import load_dotenv
-from db.models import Match, Tournament, Team, Player, MapVeto, MapGame
+from db.models import Match, Tournament, Team, Player, MapVeto, MapGame, MatchRoster
 from db.database import SessionLocal
 
 load_dotenv()
@@ -263,7 +263,37 @@ def _upsert_match(
     return match
 
 
-# to verify
+def _upsert_match_roster(
+    m: dict, match: Match, db_teams: dict, db_players: dict, session
+) -> None:
+    """Persist which players played for which team in this match."""
+    opp1, opp2 = m["match2opponents"]
+    for opp, team in [
+        (opp1, db_teams.get(opp1.get("name"))),
+        (opp2, db_teams.get(opp2.get("name"))),
+    ]:
+        if not team:
+            continue
+        for p in opp.get("match2players", []):
+            player = db_players.get(p.get("name"))
+            if not player:
+                continue
+            existing = (
+                session.query(MatchRoster)
+                .filter_by(match_id=match.id, player_id=player.id)
+                .first()
+            )
+            if not existing:
+                session.add(
+                    MatchRoster(
+                        match_id=match.id,
+                        player_id=player.id,
+                        team_id=team.id,
+                    )
+                )
+    session.flush()
+
+
 def _upsert_map_vetos(
     m: dict, match: Match, db_teams: dict, session
 ) -> dict[int, MapVeto]:
@@ -388,12 +418,14 @@ def get_matches(tournament: Tournament, session):
     data = [m for m in data if len(m.get("match2opponents", [])) == 2]
 
     db_teams = _upsert_teams(data, session)
-    _upsert_players(data, session)
+    db_players = _upsert_players(data, session)
 
     for m in data:
         match = _upsert_match(m, tournament, db_teams, session)
         if match is None:
             continue
+
+        _upsert_match_roster(m, match, db_teams, db_players, session)
         vetos_by_order = _upsert_map_vetos(m, match, db_teams, session)
         _upsert_map_games(m, match, vetos_by_order, session)
 

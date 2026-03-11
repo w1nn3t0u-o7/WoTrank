@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -45,9 +46,16 @@ class Team(Base):
     template = Column(String, unique=True, nullable=False)
 
     map_vetos = relationship("MapVeto", back_populates="team")
-    team1_matches = relationship("Match", back_populates="team1", foreign_keys="Match.team1_id")
-    team2_matches = relationship("Match", back_populates="team2", foreign_keys="Match.team2_id")
-    won_matches = relationship("Match", back_populates="winner", foreign_keys="Match.winner_id")
+    match_rosters = relationship("MatchRoster", back_populates="team")
+    team1_matches = relationship(
+        "Match", back_populates="team1", foreign_keys="Match.team1_id"
+    )
+    team2_matches = relationship(
+        "Match", back_populates="team2", foreign_keys="Match.team2_id"
+    )
+    won_matches = relationship(
+        "Match", back_populates="winner", foreign_keys="Match.winner_id"
+    )
 
 
 class Player(Base):
@@ -62,6 +70,7 @@ class Player(Base):
     account_id = Column(BigInteger, unique=True)
 
     entries = relationship("PlayerEntry", back_populates="player")
+    match_rosters = relationship("MatchRoster", back_populates="player")
 
 
 class Match(Base):
@@ -83,10 +92,17 @@ class Match(Base):
     tournament = relationship("Tournament", back_populates="matches")
     map_games = relationship("MapGame", back_populates="match")
     map_vetos = relationship("MapVeto", back_populates="match")
+    rosters = relationship("MatchRoster", back_populates="match")
 
-    team1 = relationship("Team", back_populates="team1_matches", foreign_keys=[team1_id])
-    team2 = relationship("Team", back_populates="team2_matches", foreign_keys=[team2_id])
-    winner = relationship("Team", back_populates="won_matches", foreign_keys=[winner_id])
+    team1 = relationship(
+        "Team", back_populates="team1_matches", foreign_keys=[team1_id]
+    )
+    team2 = relationship(
+        "Team", back_populates="team2_matches", foreign_keys=[team2_id]
+    )
+    winner = relationship(
+        "Team", back_populates="won_matches", foreign_keys=[winner_id]
+    )
 
 
 class MapVeto(Base):
@@ -101,7 +117,9 @@ class MapVeto(Base):
 
     match = relationship("Match", back_populates="map_vetos")
     team = relationship("Team", back_populates="map_vetos")
-    map_game = relationship("MapGame", back_populates="map_veto", uselist=False) # one-to-one relationship, a veto can be linked to at most one map game
+    map_game = relationship(
+        "MapGame", back_populates="map_veto", uselist=False
+    )  # one-to-one relationship, a veto can be linked to at most one map game
 
 
 class MapGame(Base):
@@ -123,6 +141,22 @@ class MapGame(Base):
     match = relationship("Match", back_populates="map_games")
     games = relationship("Game", back_populates="map_game")
     map_veto = relationship("MapVeto", back_populates="map_game")
+
+
+class MatchRoster(Base):
+    __tablename__ = "match_rosters"
+    __table_args__ = (
+        UniqueConstraint("match_id", "player_id", name="uq_match_roster"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    player_id = Column(Integer, ForeignKey("players.id"), nullable=False)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
+
+    match = relationship("Match", back_populates="rosters")
+    player = relationship("Player", back_populates="match_rosters")
+    team = relationship("Team", back_populates="match_rosters")
 
 
 class Game(Base):
