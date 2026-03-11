@@ -268,20 +268,37 @@ def _upsert_map_vetos(
     m: dict, match: Match, db_teams: dict, session
 ) -> dict[int, MapVeto]:
     """Insert map veto entries. Returns a dict keyed by veto order for MapGame linking."""
-    veto_list = m.get("extradata", {}).get("vetoes", [])
+    veto_map = m.get("extradata", {}).get("mapveto", {})
+    if not veto_map:
+        return {}
+
+    opp1, opp2 = m["match2opponents"]
     vetos_by_order: dict[int, MapVeto] = {}
 
-    for i, veto in enumerate(veto_list, start=1):
-        team = db_teams.get(veto.get("team"))
+    for order_str, veto in sorted(veto_map.items(), key=lambda x: int(x[0])):
+        order = int(order_str)
+
+        if "team1" in veto:
+            map_name = veto["team1"]
+            team = db_teams.get(opp1.get("name"))
+        elif "team2" in veto:
+            map_name = veto["team2"]
+            team = db_teams.get(opp2.get("name"))
+        elif "decider" in veto:
+            map_name = veto["decider"]
+            team = None  # decider has no owning team
+        else:
+            continue
+
         map_veto = MapVeto(
             match_id=match.id,
             team_id=team.id if team else None,
-            map=veto.get("map"),
+            map=map_name,
             type=veto.get("type"),  # "ban", "pick" or "decider"
-            order=i,
+            order=order,
         )
         session.add(map_veto)
-        vetos_by_order[i] = map_veto
+        vetos_by_order[order] = map_veto
 
     session.flush()
     return vetos_by_order
@@ -377,7 +394,7 @@ def get_matches(tournament: Tournament, session):
         match = _upsert_match(m, tournament, db_teams, session)
         if match is None:
             continue
-        # vetos_by_order = _upsert_map_vetos(m, match, db_teams, session)
+        vetos_by_order = _upsert_map_vetos(m, match, db_teams, session)
         # _upsert_map_games(m, match, vetos_by_order, session)
 
 
