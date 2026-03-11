@@ -2,7 +2,7 @@ import os
 import requests
 import json
 from dotenv import load_dotenv
-from db.models import Match, Tournament, Team, Player
+from db.models import Match, Tournament, Team, Player, MapVeto, MapGame
 from db.database import SessionLocal
 
 load_dotenv()
@@ -14,6 +14,7 @@ HEADERS = {
     "Accept-Encoding": "gzip",
     "User-Agent": "mammoth (WoTrank) (contact: mzielniok@proton.me)",
 }
+
 
 # HELPER FUNCTIONS
 
@@ -60,14 +61,12 @@ def _parse_location(item: dict) -> tuple[str, str]:
     values = list(locations.values())
 
     if tournament_type.lower() == "offline":
-        region = ", ".join(values)
-        return region, "World"
+        return ", ".join(values), "World"
 
     known_regions = [v for v in values if v in REGION_TO_SERVER]
     unknown_regions = [v for v in values if v not in REGION_TO_SERVER]
 
-    all_regions = known_regions + unknown_regions
-    region = ", ".join(all_regions)
+    region = ", ".join(known_regions + unknown_regions)
 
     if len(known_regions) > 1:
         server = "World"
@@ -85,14 +84,15 @@ def _parse_mode(name: str, series: str) -> str:
         return "Onslaught"
     elif "clan showdown" in text:
         return "Standard"
-    return None
+    else:
+        return None
 
 
 def _parse_round(bracket_data: dict) -> str:
     # Right now it works for brackets 4U4L1D and 8L4DS-2Q-U-8L2D-4QL
     coordinates = bracket_data.get("coordinates")
     if not coordinates:
-        return None
+        return None  # group stage / non-bracket match
     section = bracket_data.get("bracketsection")
     depth = int(coordinates.get("semanticDepth"))
 
@@ -110,122 +110,33 @@ def _parse_round(bracket_data: dict) -> str:
         return None
 
 
-# PARSER FUNCTIONS
+# UPSERT FUNCTIONS
 
 
-def get_tournament(tournament_pagename: str, session) -> Tournament:
-
-    data = _get(
-        "tournament",
-        {
-            "conditions": f"[[pagename::{tournament_pagename}]]",
-            "query": "pageid, name, seriespage, type, locations, format, startdate, enddate, liquipediatier",
-        },
-    )
-
-    if not data:
-        raise ValueError(f"Tournament not found: {tournament_pagename}")
-
-    # print(json.dumps(data, indent=2))
-
-    item = data[0]
-    existing = session.query(Tournament).filter_by(liquipedia_id=item["pageid"]).first()
-    if existing:
-        print(f"  Tournament already exists: {existing.name}")
-        return existing
-    
-    location, server = _parse_location(item)
-
-    tournament = Tournament(
-        liquipedia_id=item.get("pageid"),
-        pagename=tournament_pagename,
-        name=item.get("name"),
-        series=item.get("seriespage"),
-        type=item.get("type"),
-        location=location,
-        server=server,
-        format=item.get("format"),
-        mode=_parse_mode(item.get("name"), item.get("seriespage")),
-        start_date=item.get("startdate"),
-        end_date=item.get("enddate"),
-        liquipedia_tier=item.get("liquipediatier"),
-    )
-
-    session.add(tournament)
-    session.flush()  # to get tournament.id for foreign keys
-    print(f"Added tournament: {tournament.name}")
-    return tournament
-
-
-def get_matches(tournament: Tournament, session):
-    data = _get(
-        "match",
-        {
-            "conditions": f"[[pagename::{tournament.pagename}]]",
-            "query": "match2id, match2bracketid, match2bracketdata, match2opponents, match2games, section, winner, bestof, date, extradata",
-        },
-    )
-
-    # for bracket in data:
-    #     print(json.dumps(bracket.get("match2bracketdata"), indent=2))
-    print(json.dumps(data[-1], indent=2))
-
+def _upsert_teams(data: list, session) -> dict[str, Team]:
+    """Collect all unique teams across all matches in the tournament, upsert them
+    into the database, and find their liquipedia pages and IDs by name matching."""
     db_teams = {}
-    db_players = {}
-
     for m in data:
-        opponents = m.get("match2opponents", [])
-        if len(opponents) != 2:
-            print(
-                f"  Skipping match {m.get('match2id')} with {len(opponents)} opponents"
-            )
-            continue
+        for opp in m.get("match2opponents", []):
+            name = opp.get("name")
 
-        # Upsert teams
-        for opp in opponents:
-            team_name = opp.get("name")
-            team_template = opp.get("template")
-
-            if team_name in db_teams:
+            if not name or name in db_teams:
                 continue
 
-            team = session.query(Team).filter_by(name=team_name).first()
+            team = session.query(Team).filter_by(name=name).first()
             if not team:
                 team = Team(
-                    template=team_template,
-                    name=team_name,
+                    name=name,
+                    template=opp.get("template"),
                 )
-
                 session.add(team)
                 session.flush()
                 print(f"  Added team: {team.name} (template: {team.template})")
             else:
                 print(f"  Found existing team: {team.name} (template: {team.template})")
 
-            db_teams[team_name] = team
-
-            players = opp.get("match2players", [])
-
-            for p in players:
-                player_name = p.get("name")
-                if player_name in db_players:
-                    continue
-
-                player = session.query(Player).filter_by(pagename=player_name).first()
-                if not player:
-                    player = Player(
-                        pagename=player_name,
-                        name=p.get("displayname"),
-                        nationality=p.get("flag"),
-                    )
-
-                    session.add(player)
-                    session.flush()
-                    print(f"    Added player: {player.name}")
-                else:
-                    print(f"    Found existing player: {player.name}")
-
-                db_players[player_name] = player
+            db_teams[name] = team
 
     # Match teams to Liquipedia pages by name
     team_names = [team.name for team in db_teams.values() if team.name]
@@ -239,8 +150,6 @@ def get_matches(tournament: Tournament, session):
                 "query": "pagename, pageid, name, template",
             },
         )
-
-        # print(json.dumps(team_pages, indent=2))
 
         teams_by_name = {t["name"]: t for t in team_pages}
 
@@ -257,10 +166,38 @@ def get_matches(tournament: Tournament, session):
 
         session.flush()
 
+    return db_teams
+
+
+def _upsert_players(data: list, session) -> dict[str, Player]:
+    """Collect all unique players across all matches in the tournament, upsert them
+    into the database, and find their liquipedia pages and IDs by name matching."""
+    db_players = {}
+    for m in data:
+        for opp in m.get("match2opponents", []):
+            for p in opp.get("match2players", []):
+                pagename = p.get("name")
+
+                if not pagename or pagename in db_players:
+                    continue
+
+                player = session.query(Player).filter_by(pagename=pagename).first()
+                if not player:
+                    player = Player(
+                        pagename=pagename,
+                        name=p.get("displayname"),
+                        nationality=p.get("flag"),
+                    )
+                    session.add(player)
+                    session.flush()
+                    print(f"  Added player: {player.name}")
+                else:
+                    print(f"  Found existing player: {player.name}")
+
+                db_players[pagename] = player
+
     # Match players to Liquipedia pages by name
-    player_names = [
-        player.pagename for player in db_players.values() if player.pagename
-    ]
+    player_names = [p.pagename for p in db_players.values() if p.pagename]
 
     if player_names:
         conditions = " OR ".join(f"[[pagename::{n}]]" for n in player_names)
@@ -271,8 +208,6 @@ def get_matches(tournament: Tournament, session):
                 "query": "pagename, pageid, id, alternateid, nationality",
             },
         )
-
-        # print(json.dumps(player_pages[:3], indent=2))
 
         players_by_name = {p["pagename"]: p for p in player_pages}
 
@@ -291,41 +226,162 @@ def get_matches(tournament: Tournament, session):
 
         session.flush()
 
-    # Now insert matches
-    for m in data:
-        opponents = m.get("match2opponents", [])
-        if len(opponents) != 2:
-            continue
+    return db_players
 
-        if session.query(Match).filter_by(liquipedia_id=m["match2id"]).first():
-            print(f"  Match already exists: {m['match2id']}")
-            continue
 
-        opp1, opp2 = opponents
-        team1 = db_teams.get(opp1.get("name"))
-        team2 = db_teams.get(opp2.get("name"))
-        winner_idx = str(m.get("winner"))
-        winner = team1 if winner_idx == "1" else team2 if winner_idx == "2" else None
+def _upsert_match(
+    m: dict, tournament: Tournament, db_teams: dict, session
+) -> Match | None:
+    """Insert a single match. Returns None if it already exists."""
+    if session.query(Match).filter_by(liquipedia_id=m["match2id"]).first():
+        print(f"  Match already exists: {m['match2id']}")
+        return None
 
-        bracket_data = m.get("match2bracketdata", {})
+    opp1, opp2 = m["match2opponents"]
+    team1 = db_teams.get(opp1.get("name"))
+    team2 = db_teams.get(opp2.get("name"))
+    winner_idx = str(m.get("winner"))
+    winner = team1 if winner_idx == "1" else team2 if winner_idx == "2" else None
 
-        match = Match(
-            tournament_id=tournament.id,
-            liquipedia_id=m.get("match2id"),
-            stage=m.get("section"),
-            round=_parse_round(bracket_data),
-            best_of=m.get("bestof"),
-            team1_id=team1.id if team1 else None,
-            team1_score=opp1.get("score"),
-            team2_id=team2.id if team2 else None,
-            team2_score=opp2.get("score"),
-            winner_id=winner.id if winner else None,
-            date_time=m.get("date"),
+    match = Match(
+        tournament_id=tournament.id,
+        liquipedia_id=m.get("match2id"),
+        stage=m.get("section"),
+        round=_parse_round(m.get("match2bracketdata", {})),
+        best_of=m.get("bestof"),
+        team1_id=team1.id if team1 else None,
+        team1_score=opp1.get("score"),
+        team2_id=team2.id if team2 else None,
+        team2_score=opp2.get("score"),
+        winner_id=winner.id if winner else None,
+        date_time=m.get("date"),
+    )
+    session.add(match)
+    session.flush()
+    print(f"  Added match: {opp1.get('name')} vs {opp2.get('name')}")
+
+    return match
+
+
+# to verify
+def _upsert_map_vetos(
+    m: dict, match: Match, db_teams: dict, session
+) -> dict[int, MapVeto]:
+    """Insert map veto entries. Returns a dict keyed by veto order for MapGame linking."""
+    veto_list = m.get("extradata", {}).get("vetoes", [])
+    vetos_by_order: dict[int, MapVeto] = {}
+
+    for i, veto in enumerate(veto_list, start=1):
+        team = db_teams.get(veto.get("team"))
+        map_veto = MapVeto(
+            match_id=match.id,
+            team_id=team.id if team else None,
+            map=veto.get("map"),
+            type=veto.get("type"),  # "ban", "pick" or "decider"
+            order=i,
         )
-        session.add(match)
-        print(f"  Added match: {opp1.get('name')} vs {opp2.get('name')}")
+        session.add(map_veto)
+        vetos_by_order[i] = map_veto
 
     session.flush()
+    return vetos_by_order
+
+
+def _upsert_map_games(
+    m: dict, match: Match, vetos_by_order: dict[int, MapVeto], session
+) -> None:
+    """Insert map game entries, optionally linking to their corresponding map veto."""
+    for i, game in enumerate(m.get("match2games", [])):
+        scores = game.get("scores", [None, None])
+        picks = [v for v in vetos_by_order.values() if v.type == "pick"]
+        veto = picks[i] if i < len(picks) else None
+
+        map_game = MapGame(
+            match_id=match.id,
+            game_index=i,
+            map=game.get("map") or "",
+            veto_id=veto.id if veto else None,
+            team1_score=scores[0] if scores else None,
+            team2_score=scores[1] if scores else None,
+            winner_index=(
+                int(game.get("winner")) if game.get("winner") else None
+            ),  # updated to match new column name
+            result_type=game.get("resulttype"),
+            vod_url=game.get("vod"),
+        )
+        session.add(map_game)
+
+    session.flush()
+
+
+# PARSER FUNCTIONS
+
+
+def get_tournament(tournament_pagename: str, session) -> Tournament:
+    data = _get(
+        "tournament",
+        {
+            "conditions": f"[[pagename::{tournament_pagename}]]",
+            "query": "pageid, name, seriespage, type, locations, format, startdate, enddate, liquipediatier",
+        },
+    )
+
+    if not data:
+        raise ValueError(f"Tournament not found: {tournament_pagename}")
+
+    item = data[0]
+    existing = session.query(Tournament).filter_by(liquipedia_id=item["pageid"]).first()
+    if existing:
+        print(f"  Tournament already exists: {existing.name}")
+        return existing
+
+    location, server = _parse_location(item)
+
+    tournament = Tournament(
+        liquipedia_id=item.get("pageid"),
+        pagename=tournament_pagename,
+        name=item.get("name"),
+        series=item.get("seriespage"),
+        type=item.get("type"),
+        location=location,
+        server=server,
+        format=item.get("format"),
+        mode=_parse_mode(item.get("name"), item.get("seriespage")),
+        start_date=item.get("startdate"),
+        end_date=item.get("enddate"),
+        liquipedia_tier=item.get("liquipediatier"),
+    )
+    session.add(tournament)
+    session.flush()
+    print(f"Added tournament: {tournament.name}")
+    return tournament
+
+
+def get_matches(tournament: Tournament, session):
+    data = _get(
+        "match",
+        {
+            "conditions": f"[[pagename::{tournament.pagename}]]",
+            "query": "match2id, match2bracketid, match2bracketdata, match2opponents, match2games, section, winner, bestof, date, extradata",
+        },
+    )
+
+    print(json.dumps(data[-1], indent=2))
+
+    data = [m for m in data if len(m.get("match2opponents", [])) == 2]
+
+    db_teams = _upsert_teams(data, session)
+    _upsert_players(data, session)
+
+    for m in data:
+        match = _upsert_match(m, tournament, db_teams, session)
+        if match is None:
+            continue
+        # vetos_by_order = _upsert_map_vetos(m, match, db_teams, session)
+        # _upsert_map_games(m, match, vetos_by_order, session)
+
+
+# Sync entry point
 
 
 def sync_tournament(tournament_pagename: str):
