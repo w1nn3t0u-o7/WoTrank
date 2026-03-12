@@ -164,14 +164,7 @@ class Game(Base):
 
     id = Column(Integer, primary_key=True)
     map_game_id = Column(Integer, ForeignKey("map_games.id"))
-    # round_number     = Column(Integer)   # 1, 2, 3, etc.
-    arena_unique_id = Column(String, unique=True)  # deduplication key, from the replay
-    date_time = Column(DateTime)  # from the replay
-    duration = Column(Integer)  # from the replay
-    winner_team = Column(Integer)
-    wot_version = Column(String)
-    source = Column(String, default="replay")  # "replay" | "manual"
-    replay_file = Column(String)
+    
 
     map_game = relationship("MapGame", back_populates="games")
     entries = relationship("PlayerEntry", back_populates="game")
@@ -184,48 +177,6 @@ class PlayerEntry(Base):
     game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
     player_id = Column(Integer, ForeignKey("players.id"))
 
-    # Identity (filled from block0 vehicles / block1 roster + players dict)
-    account_id = Column(BigInteger)
-    name = Column(String)
-    clan = Column(String)
-    team = Column(Integer)
-    entity_id = Column(String)
-
-    # Vehicle
-    vehicle_type = Column(String)  # "germany:G125_Spz_57_Rh"
-    vehicle_nation = Column(String)  # "germany"
-    vehicle_tag = Column(String)  # "G125_Spz_57_Rh"
-
-    # Core performance
-    kills = Column(Integer)
-    damage_dealt = Column(Integer)
-    damage_assisted_radio = Column(Integer)
-    damage_assisted_track = Column(Integer)
-    damage_assisted_stun = Column(Integer)
-    damage_assisted_inspire = Column(Integer)
-    damage_assisted_smoke = Column(Integer)
-    damage_blocked = Column(Integer)
-    damage_received = Column(Integer)
-    spotted = Column(Integer)
-
-    # Shots
-    shots = Column(Integer)
-    direct_hits = Column(Integer)
-    piercings = Column(Integer)
-    piercings_received = Column(Integer)
-
-    # Survival
-    survived = Column(Boolean)
-    life_time_sec = Column(Integer)
-    death_reason = Column(Integer)  # -1 = survived
-    killed_by_entity_id = Column(String)  # from deathInfo.killerID
-
-    # Economy
-    xp = Column(Integer)
-    credits = Column(Integer)
-
-    # Data quality
-    source = Column(String, default="replay")  # "replay" | "manual"
 
     game = relationship("Game", back_populates="entries")
     player = relationship("Player", back_populates="entries")
