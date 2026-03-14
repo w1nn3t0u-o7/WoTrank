@@ -3,8 +3,8 @@ import json
 from pathlib import Path
 from db.database import engine, init_db, SessionLocal
 from db.models import Base, Tournament
-from parser.replay_importer import import_replay, parse_replay_blocks
-from parser.liquipedia_sync import get_matches, sync_tournament
+from parser.replay_importer import parse_replay_blocks, import_replay
+from parser.liquipedia_sync import sync_tournament
 
 
 def create_tables():
@@ -39,7 +39,7 @@ def import_one(replay_path: str):
         session.close()
 
 def import_directory(directory: str):
-    replays = list(Path(directory).glob("*.wotreplay"))
+    replays = list(Path(directory).rglob("*.wotreplay"))
     print(f"Found {len(replays)} replays in directory: {directory}")
     session = SessionLocal()
     for replay in replays:
@@ -86,8 +86,6 @@ def export_to_json(replay_path: str, output_path: str, block: str = None):
 
 def sync_liquipedia(tournament_pagename: str):
     sync_tournament(tournament_pagename)
-    # get_teams_and_players(tournament_name)
-    # get_matches(tournament_name)
 
 def set_tournament_mode(liquipedia_id: int, mode: str):
     VALID_MODES = ("Standard", "Onslaught", "Attack/Defense")

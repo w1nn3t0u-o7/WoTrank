@@ -185,14 +185,14 @@ def _upsert_players(data: list, session) -> dict[str, Player]:
                 if not player:
                     player = Player(
                         pagename=pagename,
-                        name=p.get("displayname"),
+                        display_name=p.get("displayname"),
                         nationality=p.get("flag"),
                     )
                     session.add(player)
                     session.flush()
-                    print(f"  Added player: {player.name}")
+                    print(f"  Added player: {player.display_name}")
                 else:
-                    print(f"  Found existing player: {player.name}")
+                    print(f"  Found existing player: {player.display_name}")
 
                 db_players[pagename] = player
 
