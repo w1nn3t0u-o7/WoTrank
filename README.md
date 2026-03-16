@@ -8,5 +8,6 @@
 - [ ] Add MVP column to the tournaments table extarcted from the placements or find a different way to extract mvp data
 - [ ] deal with the differing replay nicknames and liquipedia data
 - [ ] deal with different languages map names 
+- [ ] add colors to the logs for better readability
 
 

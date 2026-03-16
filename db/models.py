@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -64,9 +62,11 @@ class Player(Base):
 
     id = Column(Integer, primary_key=True)
     liquipedia_id = Column(Integer, unique=True)
-    pagename = Column(String, unique=True, nullable=False) # name of the player's Liquipedia page
-    name = Column(String) # name from Liquipedia page
-    display_name = Column(String)  # name from the rosters on the tournament page  
+    pagename = Column(
+        String, unique=True, nullable=False
+    )  # name of the player's Liquipedia page
+    name = Column(String)  # name from Liquipedia page
+    display_name = Column(String)  # name from the rosters on the tournament page
     alternate_names = Column(String)  # comma-separated list of alternate names
     nationality = Column(String)
 

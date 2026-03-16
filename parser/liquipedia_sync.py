@@ -2,6 +2,7 @@ import os
 import requests
 import json
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
 from db.models import Match, Tournament, Team, Player, MapVeto, MapGame, MatchRoster
 from db.database import SessionLocal
 
@@ -113,7 +114,7 @@ def _parse_round(bracket_data: dict) -> str:
 # UPSERT FUNCTIONS
 
 
-def _upsert_teams(data: list, session) -> dict[str, Team]:
+def _upsert_teams(data: list, session: Session) -> dict[str, Team]:
     """Collect all unique teams across all matches in the tournament, upsert them
     into the database, and find their liquipedia pages and IDs by name matching."""
     db_teams = {}
@@ -169,7 +170,7 @@ def _upsert_teams(data: list, session) -> dict[str, Team]:
     return db_teams
 
 
-def _upsert_players(data: list, session) -> dict[str, Player]:
+def _upsert_players(data: list, session: Session) -> dict[str, Player]:
     """Collect all unique players across all matches in the tournament, upsert them
     into the database, and find their liquipedia pages and IDs by name matching."""
     db_players = {}
@@ -230,7 +231,7 @@ def _upsert_players(data: list, session) -> dict[str, Player]:
 
 
 def _upsert_match(
-    m: dict, tournament: Tournament, db_teams: dict, session
+    m: dict, tournament: Tournament, db_teams: dict, session: Session
 ) -> Match | None:
     """Insert a single match. Returns None if it already exists."""
     if session.query(Match).filter_by(liquipedia_id=m["match2id"]).first():
@@ -264,7 +265,7 @@ def _upsert_match(
 
 
 def _upsert_match_roster(
-    m: dict, match: Match, db_teams: dict, db_players: dict, session
+    m: dict, match: Match, db_teams: dict, db_players: dict, session: Session
 ) -> None:
     """Persist which players played for which team in this match."""
     opp1, opp2 = m["match2opponents"]
@@ -295,7 +296,7 @@ def _upsert_match_roster(
 
 
 def _upsert_map_vetos(
-    m: dict, match: Match, db_teams: dict, session
+    m: dict, match: Match, db_teams: dict, session: Session
 ) -> dict[int, MapVeto]:
     """Insert map veto entries. Returns a dict keyed by veto order for MapGame linking."""
     veto_map = m.get("extradata", {}).get("mapveto", {})
@@ -335,7 +336,7 @@ def _upsert_map_vetos(
 
 
 def _upsert_map_games(
-    m: dict, match: Match, vetos_by_order: dict[int, MapVeto], session
+    m: dict, match: Match, vetos_by_order: dict[int, MapVeto], session: Session
 ) -> None:
     """Insert map game entries, optionally linking to their corresponding map veto."""
     veto_by_map = {v.map: v for v in vetos_by_order.values()}
@@ -364,7 +365,7 @@ def _upsert_map_games(
 # PARSER FUNCTIONS
 
 
-def get_tournament(tournament_pagename: str, session) -> Tournament:
+def get_tournament(tournament_pagename: str, session: Session) -> Tournament:
     data = _get(
         "tournament",
         {
@@ -404,7 +405,7 @@ def get_tournament(tournament_pagename: str, session) -> Tournament:
     return tournament
 
 
-def get_matches(tournament: Tournament, session):
+def get_matches(tournament: Tournament, session: Session):
     data = _get(
         "match",
         {
