@@ -21,6 +21,78 @@ MAGIC_NUM = b"\x12\x32\x34\x11"
 OBSERVER_TAG = "ussr:Observer"
 
 
+# HELPERS
+
+
+def _normalize(name: str) -> str:
+    name = name.strip().lower()
+    name = name.replace("_", "").replace(" ", "").replace("-", "")
+    name = name.replace("l", "i").replace("1", "i")
+    return name
+
+
+def _all_names(player: Player) -> list[str]:
+    return [
+        player.name or "",
+        player.pagename or "",
+        player.display_name or "",
+        *[a.strip() for a in (player.alternate_names or "").split(",") if a.strip()],
+    ]
+
+
+def _find_player_by_name(name: str, session: Session) -> Player | None:
+    all_players = session.query(Player).all()
+    norm_name = _normalize(name)
+
+    candidate_pool: list[tuple[str, Player]] = []
+    for player in all_players:
+        for c in _all_names(player):
+            if c:
+                nc = _normalize(c)
+                if nc:
+                    candidate_pool.append((nc, player))
+
+    for nc, player in candidate_pool:
+        if norm_name == nc:
+            return player
+
+    best_player, best_score = None, 0.0
+    for nc, player in candidate_pool:
+        if len(nc) < 3:
+            continue
+        score = fuzz.partial_ratio(nc, norm_name)
+        if score > best_score:
+            best_score = score
+            best_player = player
+
+    threshold = _adaptive_threshold(norm_name)
+    if best_score >= threshold:
+        print(
+            f"  Matched '{name}' → '{best_player.display_name}' "
+            f"(partial_ratio: {best_score:.0f}, threshold: {threshold})"
+        )
+        return best_player
+
+    print(
+        f"  Warning: could not match player with name '{name}' "
+        f"(best score: {best_score:.0f} with '{best_player.display_name}')"
+    )
+    return None
+
+
+def _adaptive_threshold(norm_name: str) -> float:
+    """Shorter replay names need a stricter threshold to avoid false positives."""
+    length = len(norm_name)
+    if length <= 5:
+        return 100.0  # e.g. "krias" — must be exact
+    if length <= 6:
+        return 95.0  # small wiggle room for l/I confusion
+    return 85.0  # long names like "frugodabelyoo" — very safe
+
+
+# MAIN FUNCTIONS
+
+
 def parse_replay_blocks(replay_path: str) -> list:
     blocks = []
     with open(replay_path, "rb") as replay:
@@ -83,77 +155,6 @@ def resolve_players(
         session.add(account)
 
     return matched
-
-
-def _normalize(name: str) -> str:
-    name = name.strip().lower()
-    name = name.replace("_", "").replace(" ", "").replace("-", "")
-    name = name.replace("l", "i").replace("1", "i")  # l/I/1 unification
-    return name
-
-
-def _all_names(player: Player) -> list[str]:
-    return [
-        player.name or "",
-        player.pagename or "",
-        player.display_name or "",
-        *[a.strip() for a in (player.alternate_names or "").split(",") if a.strip()],
-    ]
-
-
-def _find_player_by_name(name: str, session: Session) -> Player | None:
-    all_players = session.query(Player).all()
-    norm_name = _normalize(name)  # keep only l→i, 1→i, lowercase
-
-    # Build flat list of (norm_candidate, player) once
-    candidate_pool: list[tuple[str, Player]] = []
-    for player in all_players:
-        for c in _all_names(player):
-            if c:
-                nc = _normalize(c)
-                if nc:
-                    candidate_pool.append((nc, player))
-
-    # Pass 1 — exact on raw name (fastest exit)
-    for nc, player in candidate_pool:
-        if norm_name == nc:
-            return player
-
-    # Pass 2 — partial_ratio: DB name as substring of replay name
-    # e.g. "frugo" inside "frugodabelyoo" → 100
-    # threshold scales with name length to avoid short-name false positives
-    best_player, best_score = None, 0.0
-    for nc, player in candidate_pool:
-        if len(nc) < 3:  # skip very short names from DB side
-            continue
-        score = fuzz.partial_ratio(nc, norm_name)
-        if score > best_score:
-            best_score = score
-            best_player = player
-
-    threshold = _adaptive_threshold(norm_name)
-    if best_score >= threshold:
-        print(
-            f"  Matched '{name}' → '{best_player.display_name}' "
-            f"(partial_ratio: {best_score:.0f}, threshold: {threshold})"
-        )
-        return best_player
-
-    print(
-        f"  Warning: could not match player with name '{name}' "
-        f"(best score: {best_score:.0f} with '{best_player.display_name}')"
-    )
-    return None
-
-
-def _adaptive_threshold(norm_name: str) -> float:
-    """Shorter replay names need a stricter threshold to avoid false positives."""
-    length = len(norm_name)
-    if length <= 5:
-        return 100.0  # e.g. "krias" — must be exact
-    if length <= 6:
-        return 95.0  # small wiggle room for l/I confusion
-    return 85.0  # long names like "frugodabelyoo" — very safe
 
 
 def find_map_game(
