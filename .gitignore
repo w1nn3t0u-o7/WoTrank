@@ -5,3 +5,11 @@ venv/
 .env
 *.pyc
 */__pycache__/
+
+
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
