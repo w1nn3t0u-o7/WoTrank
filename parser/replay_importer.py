@@ -1,11 +1,10 @@
-import json
-import struct
 import datetime
 from collections import Counter
 from pathlib import Path
 from rapidfuzz import fuzz
 from sqlalchemy.orm import Session
-
+from parser.utils import parse_replay_blocks
+from db.map_data import MAPS
 from db.models import (
     MapGame,
     Match,
@@ -17,7 +16,6 @@ from db.models import (
     Vehicles,
 )
 
-MAGIC_NUM = b"\x12\x32\x34\x11"
 OBSERVER_TAG = "ussr:Observer"
 
 
@@ -93,23 +91,6 @@ def _adaptive_threshold(norm_name: str) -> float:
 # MAIN FUNCTIONS
 
 
-def parse_replay_blocks(replay_path: str) -> list:
-    blocks = []
-    with open(replay_path, "rb") as replay:
-        if replay.read(4) != MAGIC_NUM:
-            raise ValueError(f"Not a valid WoT replay: {replay_path}")
-
-        block_count = struct.unpack("I", replay.read(4))[0]
-
-        for i in range(block_count):
-            size = struct.unpack("I", replay.read(4))[0]
-            try:
-                blocks.append(json.loads(replay.read(size)))
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Block {i} JSON parse error: {e}")
-    return blocks
-
-
 def resolve_players(
     roster: dict, vehicles: dict, session: Session
 ) -> dict[str, Player]:
@@ -161,7 +142,7 @@ def find_map_game(
     block0: dict, entity_to_player: dict[str, Player], session: Session
 ) -> MapGame | None:
     """Returns a MapGame matching the replay's map and game mode."""
-    map_name = block0.get("mapDisplayName")
+    map_name = MAPS.get(block0.get("mapName"))
     raw_date = block0.get("dateTime", "")
     try:
         replay_dt = datetime.datetime.strptime(raw_date, "%d.%m.%Y %H:%M:%S")
@@ -242,7 +223,7 @@ def build_game(
     return Game(
         map_game_id=map_game_id,
         arena_unique_id=str(arena_id),
-        map=block0.get("mapDisplayName"),
+        map=MAPS.get(block0.get("mapName")),
         game_version=block0.get("clientVersionFromExe"),
         server=block0.get("serverName"),
         date_time=dt,

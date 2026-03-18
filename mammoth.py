@@ -3,8 +3,9 @@ import json
 from pathlib import Path
 from db.database import engine, init_db, SessionLocal
 from db.models import Base, Tournament
-from parser.replay_importer import parse_replay_blocks, import_replay
+from parser.replay_importer import import_replay
 from parser.liquipedia_sync import sync_tournament
+from parser.utils import parse_replay_blocks, list_all_replay_maps
 
 
 def create_tables():
@@ -105,6 +106,18 @@ def set_tournament_mode(liquipedia_id: int, mode: str):
     print(f"Updated tournament '{tournament.name}' (Liquipedia ID: {liquipedia_id}) with mode: {mode}")
     
 
+def discover_maps(directory: str):
+    maps = list_all_replay_maps(directory)
+
+    if not maps:
+        print("No replays found or no map data extracted.")
+        return
+    
+    lines = [f'  "{k}": "{v}",' for k, v in maps.items()]
+    output = "MAPS = {\n" + "\n".join(lines) + "\n}"
+
+    print(output)
+    print(f"\n{len(maps)} unique maps found")
 
 COMMANDS = {
     "create":    (create_tables,   "Create tables"),
@@ -114,7 +127,8 @@ COMMANDS = {
     "importall": (import_directory,   "Import whole directory:  importall <path>"),
     "export":    (export_to_json,   "Export replay to JSON:  export <replay_path> <output_path> [block]"),
     "sync":      (sync_liquipedia, "Sync tournament from Liquipedia: sync <tournament_pagename>"),
-    "set-mode":   (set_tournament_mode, "Set tournament mode: set-mode <liquipedia_id> <mode>")
+    "set-mode":   (set_tournament_mode, "Set tournament mode: set-mode <liquipedia_id> <mode>"),
+    "discover-maps": (discover_maps, "Discover maps from replays: discover-maps <dir>"),
 }
 
 
