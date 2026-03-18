@@ -9,7 +9,7 @@
 - [ ] deal with the differing replay nicknames and liquipedia data
     - [ ] 2 names are cant be currently matched by fuzzy matcher
     - [ ] add a possibility to add player entry based off of replay performance if a player is not listed on liquipedia tournament page
-- [ ] deal with different languages map names 
+- [x] deal with different languages map names 
 - [ ] add colors to the logs for better readability
 
 

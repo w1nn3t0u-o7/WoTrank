@@ -217,7 +217,8 @@ def _upsert_players(data: list, session: Session) -> dict[str, Player]:
             if page:
                 player.liquipedia_id = page["pageid"]
                 player.name = page["id"]
-                player.alternate_names = page["alternateid"]
+                alternate = (page.get("alternateid") or "").strip()
+                player.alternate_names = alternate if alternate else None
                 player.nationality = page["nationality"]
                 print(
                     f"  Updated player {player.pagename} with Liquipedia ID: {player.liquipedia_id}"
