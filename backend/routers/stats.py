@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from db.database import SessionLocal
-from db.models import PlayerEntry, Vehicles, Game
+from db.models import Game, PlayerEntry, Vehicles
 
 router = APIRouter()
 

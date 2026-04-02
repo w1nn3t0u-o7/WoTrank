@@ -1,17 +1,19 @@
 import datetime
 from collections import Counter
+from parser.utils import parse_replay_blocks
 from pathlib import Path
+
 from rapidfuzz import fuzz
 from sqlalchemy.orm import Session
-from parser.utils import parse_replay_blocks
+
 from db.map_data import MAPS
 from db.models import (
+    Game,
     MapGame,
     Match,
+    MatchRoster,
     Player,
     PlayerAccount,
-    Game,
-    MatchRoster,
     PlayerEntry,
     Vehicles,
 )

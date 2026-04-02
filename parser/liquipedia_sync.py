@@ -1,10 +1,12 @@
-import os
-import requests
 import json
+import os
+
+import requests
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
-from db.models import Match, Tournament, Team, Player, MapVeto, MapGame, MatchRoster
+
 from db.database import SessionLocal
+from db.models import MapGame, MapVeto, Match, MatchRoster, Player, Team, Tournament
 
 load_dotenv()
 

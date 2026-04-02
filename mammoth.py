@@ -1,11 +1,12 @@
-import sys
 import json
-from pathlib import Path
-from db.database import engine, init_db, SessionLocal
-from db.models import Base, Tournament
-from parser.replay_importer import import_replay
+import sys
 from parser.liquipedia_sync import sync_tournament
-from parser.utils import parse_replay_blocks, list_all_replay_maps
+from parser.replay_importer import import_replay
+from parser.utils import list_all_replay_maps, parse_replay_blocks
+from pathlib import Path
+
+from db.database import SessionLocal, engine, init_db
+from db.models import Base, Tournament
 
 
 def create_tables():
@@ -14,7 +15,9 @@ def create_tables():
 
 
 def drop_tables():
-    confirm = input("Are you sure you want to drop all tables? This action cannot be undone! (yes/no): ")
+    confirm = input(
+        "Are you sure you want to drop all tables? This action cannot be undone! (yes/no): "
+    )
     if confirm.lower() == "yes":
         Base.metadata.drop_all(engine)
         print("All database tables dropped.")
@@ -38,6 +41,7 @@ def import_one(replay_path: str):
         session.rollback()
     finally:
         session.close()
+
 
 def import_directory(directory: str):
     replays = list(Path(directory).rglob("*.wotreplay"))
@@ -63,8 +67,8 @@ def export_to_json(replay_path: str, output_path: str, block: str = None):
     try:
         blocks = parse_replay_blocks(replay_path)
     except ValueError as e:
-            print(f"Error: {e}")
-            sys.exit(1)
+        print(f"Error: {e}")
+        sys.exit(1)
 
     if block is not None:
         block_idx = int(block)
@@ -85,8 +89,10 @@ def export_to_json(replay_path: str, output_path: str, block: str = None):
     else:
         print(json_str)
 
+
 def sync_liquipedia(tournament_pagename: str):
     sync_tournament(tournament_pagename)
+
 
 def set_tournament_mode(liquipedia_id: int, mode: str):
     VALID_MODES = ("Standard", "Onslaught", "Attack/Defense")
@@ -95,7 +101,9 @@ def set_tournament_mode(liquipedia_id: int, mode: str):
         sys.exit(1)
 
     session = SessionLocal()
-    tournament = session.query(Tournament).filter_by(liquipedia_id=liquipedia_id).first()
+    tournament = (
+        session.query(Tournament).filter_by(liquipedia_id=liquipedia_id).first()
+    )
     if not tournament:
         print(f"Error: tournament not found with Liquipedia ID: {liquipedia_id}")
         session.close()
@@ -103,8 +111,10 @@ def set_tournament_mode(liquipedia_id: int, mode: str):
     tournament.mode = mode
     session.commit()
     session.close()
-    print(f"Updated tournament '{tournament.name}' (Liquipedia ID: {liquipedia_id}) with mode: {mode}")
-    
+    print(
+        f"Updated tournament '{tournament.name}' (Liquipedia ID: {liquipedia_id}) with mode: {mode}"
+    )
+
 
 def discover_maps(directory: str):
     maps = list_all_replay_maps(directory)
@@ -112,22 +122,32 @@ def discover_maps(directory: str):
     if not maps:
         print("No replays found or no map data extracted.")
         return
-    
+
     lines = [f'  "{k}": "{v}",' for k, v in maps.items()]
     output = "MAPS = {\n" + "\n".join(lines) + "\n}"
 
     print(output)
     print(f"\n{len(maps)} unique maps found")
 
+
 COMMANDS = {
-    "create":    (create_tables,   "Create tables"),
-    "drop":      (drop_tables,     "Drop all tables"),
-    "recreate":  (recreate_tables, "Drop and recreate tables"),
-    "import":    (import_one,      "Import one replay:    import <path>"),
-    "importall": (import_directory,   "Import whole directory:  importall <path>"),
-    "export":    (export_to_json,   "Export replay to JSON:  export <replay_path> <output_path> [block]"),
-    "sync":      (sync_liquipedia, "Sync tournament from Liquipedia: sync <tournament_pagename>"),
-    "set-mode":   (set_tournament_mode, "Set tournament mode: set-mode <liquipedia_id> <mode>"),
+    "create": (create_tables, "Create tables"),
+    "drop": (drop_tables, "Drop all tables"),
+    "recreate": (recreate_tables, "Drop and recreate tables"),
+    "import": (import_one, "Import one replay:    import <path>"),
+    "importall": (import_directory, "Import whole directory:  importall <path>"),
+    "export": (
+        export_to_json,
+        "Export replay to JSON:  export <replay_path> <output_path> [block]",
+    ),
+    "sync": (
+        sync_liquipedia,
+        "Sync tournament from Liquipedia: sync <tournament_pagename>",
+    ),
+    "set-mode": (
+        set_tournament_mode,
+        "Set tournament mode: set-mode <liquipedia_id> <mode>",
+    ),
     "discover-maps": (discover_maps, "Discover maps from replays: discover-maps <dir>"),
 }
 
@@ -144,7 +164,7 @@ if __name__ == "__main__":
         usage()
         sys.exit(1)
 
-    cmd  = sys.argv[1]
+    cmd = sys.argv[1]
     args = sys.argv[2:]
-    fn   = COMMANDS[cmd][0]
+    fn = COMMANDS[cmd][0]
     fn(*args) if args else fn()
