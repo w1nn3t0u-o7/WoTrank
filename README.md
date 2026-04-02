@@ -1,6 +1,7 @@
 # TODO
 
 - [ ] decide on the level of type-checking
+- [ ] discover how to host api and frontend on my home server
 
 ## Parser
 
