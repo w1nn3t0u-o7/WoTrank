@@ -1,5 +1,4 @@
 import json
-import logging
 import sys
 from parser.liquipedia_sync import sync_tournament
 from parser.replay_importer import import_replay

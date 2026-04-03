@@ -1,5 +1,4 @@
 import datetime
-import logging
 from collections import Counter
 from parser.utils import parse_replay_blocks
 from pathlib import Path
@@ -286,7 +285,9 @@ def build_player_entries(
             .first()
         )
         if existing_entry:
-            logger.debug(f"Player entry already exists: game {game_id}, entity {game_entity_id}")
+            logger.debug(
+                f"Player entry already exists: game {game_id}, entity {game_entity_id}"
+            )
             entries.append(existing_entry)
             continue
 

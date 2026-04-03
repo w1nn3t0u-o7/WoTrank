@@ -1,5 +1,3 @@
-import json
-import logging
 import os
 from typing import Optional
 
@@ -161,7 +159,9 @@ def _upsert_teams(data: list, session: Session) -> dict[str, Team]:
                 session.flush()
                 logger.info(f"Added team: {team.name} (template: {team.template})")
             else:
-                logger.debug(f"Found existing team: {team.name} (template: {team.template})")
+                logger.debug(
+                    f"Found existing team: {team.name} (template: {team.template})"
+                )
 
             db_teams[name] = team
 
@@ -386,9 +386,7 @@ def _upsert_map_games(
 
         # Check for existing map game to prevent duplicates
         existing = (
-            session.query(MapGame)
-            .filter_by(match_id=match.id, game_index=i)
-            .first()
+            session.query(MapGame).filter_by(match_id=match.id, game_index=i).first()
         )
         if existing:
             logger.debug(f"Map game already exists: match {match.id}, game {i}")
@@ -470,7 +468,9 @@ def get_matches(tournament: Tournament, session: Session):
 
     data = [m for m in data if len(m.get("match2opponents", [])) == 2]
     if not data:
-        logger.warning(f"No valid matches (with 2 opponents) found for tournament: {tournament.name}")
+        logger.warning(
+            f"No valid matches (with 2 opponents) found for tournament: {tournament.name}"
+        )
         return
 
     logger.info(f"Processing {len(data)} matches for tournament: {tournament.name}")
