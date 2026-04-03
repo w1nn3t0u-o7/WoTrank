@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Optional
 
@@ -19,6 +20,9 @@ from db.models import (
     TournamentServer,
     TournamentType,
 )
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 load_dotenv()
 
@@ -155,9 +159,9 @@ def _upsert_teams(data: list, session: Session) -> dict[str, Team]:
                 )
                 session.add(team)
                 session.flush()
-                print(f"  Added team: {team.name} (template: {team.template})")
+                logger.info(f"Added team: {team.name} (template: {team.template})")
             else:
-                print(f"  Found existing team: {team.name} (template: {team.template})")
+                logger.debug(f"Found existing team: {team.name} (template: {team.template})")
 
             db_teams[name] = team
 
@@ -181,11 +185,11 @@ def _upsert_teams(data: list, session: Session) -> dict[str, Team]:
             if page:
                 team.liquipedia_id = page["pageid"]
                 team.template = page["template"]
-                print(
-                    f"  Updated team {team.name} with Liquipedia ID: {team.liquipedia_id}"
+                logger.info(
+                    f"Updated team {team.name} with Liquipedia ID: {team.liquipedia_id}"
                 )
             else:
-                print(f"  No Liquipedia page found for team: {team.name}")
+                logger.debug(f"No Liquipedia page found for team: {team.name}")
 
         session.flush()
 
@@ -213,9 +217,9 @@ def _upsert_players(data: list, session: Session) -> dict[str, Player]:
                     )
                     session.add(player)
                     session.flush()
-                    print(f"  Added player: {player.display_name}")
+                    logger.info(f"Added player: {player.display_name}")
                 else:
-                    print(f"  Found existing player: {player.display_name}")
+                    logger.debug(f"Found existing player: {player.display_name}")
 
                 db_players[pagename] = player
 
@@ -242,11 +246,11 @@ def _upsert_players(data: list, session: Session) -> dict[str, Player]:
                 alternate = (page.get("alternateid") or "").strip()
                 player.alternate_names = alternate if alternate else None
                 player.nationality = page["nationality"]
-                print(
-                    f"  Updated player {player.pagename} with Liquipedia ID: {player.liquipedia_id}"
+                logger.info(
+                    f"Updated player {player.pagename} with Liquipedia ID: {player.liquipedia_id}"
                 )
             else:
-                print(f"  No Liquipedia page found for player: {player.pagename}")
+                logger.debug(f"No Liquipedia page found for player: {player.pagename}")
 
         session.flush()
 
@@ -258,7 +262,7 @@ def _upsert_match(
 ) -> Match | None:
     """Insert a single match. Returns None if it already exists."""
     if session.query(Match).filter_by(liquipedia_id=m["match2id"]).first():
-        print(f"  Match already exists: {m['match2id']}")
+        logger.debug(f"Match already exists: {m['match2id']}")
         return None
 
     opp1, opp2 = m["match2opponents"]
@@ -282,7 +286,7 @@ def _upsert_match(
     )
     session.add(match)
     session.flush()
-    print(f"  Added match: {opp1.get('name')} vs {opp2.get('name')}")
+    logger.info(f"Added match: {opp1.get('name')} vs {opp2.get('name')}")
 
     return match
 
@@ -344,6 +348,17 @@ def _upsert_map_vetos(
         else:
             continue
 
+        # Check for existing veto to prevent duplicates
+        existing = (
+            session.query(MapVeto)
+            .filter_by(match_id=match.id, order=order, map=map_name)
+            .first()
+        )
+        if existing:
+            logger.debug(f"Map veto already exists: match {match.id}, order {order}")
+            vetos_by_order[order] = existing
+            continue
+
         map_veto = MapVeto(
             match_id=match.id,
             team_id=team.id if team else None,
@@ -368,6 +383,16 @@ def _upsert_map_games(
         scores = game.get("scores", [])
         winner_raw = game.get("winner")
         map_name = game.get("map") or ""
+
+        # Check for existing map game to prevent duplicates
+        existing = (
+            session.query(MapGame)
+            .filter_by(match_id=match.id, game_index=i)
+            .first()
+        )
+        if existing:
+            logger.debug(f"Map game already exists: match {match.id}, game {i}")
+            continue
 
         map_game = MapGame(
             match_id=match.id,
@@ -403,7 +428,7 @@ def get_tournament(tournament_pagename: str, session: Session) -> Tournament:
     item = data[0]
     existing = session.query(Tournament).filter_by(liquipedia_id=item["pageid"]).first()
     if existing:
-        print(f"  Tournament already exists: {existing.name}")
+        logger.debug(f"Tournament already exists: {existing.name}")
         return existing
 
     location, server = _parse_location(item)
@@ -424,7 +449,7 @@ def get_tournament(tournament_pagename: str, session: Session) -> Tournament:
     )
     session.add(tournament)
     session.flush()
-    print(f"Added tournament: {tournament.name}")
+    logger.info(f"Added tournament: {tournament.name}")
     return tournament
 
 
@@ -437,21 +462,33 @@ def get_matches(tournament: Tournament, session: Session):
         },
     )
 
-    print(json.dumps(data[-1], indent=2))
+    if not data:
+        logger.warning(f"No matches found for tournament: {tournament.name}")
+        return
+
+    logger.debug(f"Fetched {len(data)} matches for tournament: {tournament.name}")
 
     data = [m for m in data if len(m.get("match2opponents", [])) == 2]
+    if not data:
+        logger.warning(f"No valid matches (with 2 opponents) found for tournament: {tournament.name}")
+        return
+
+    logger.info(f"Processing {len(data)} matches for tournament: {tournament.name}")
 
     db_teams = _upsert_teams(data, session)
     db_players = _upsert_players(data, session)
 
     for m in data:
-        match = _upsert_match(m, tournament, db_teams, session)
-        if match is None:
-            continue
+        try:
+            match = _upsert_match(m, tournament, db_teams, session)
+            if match is None:
+                continue
 
-        _upsert_match_roster(m, match, db_teams, db_players, session)
-        vetos_by_order = _upsert_map_vetos(m, match, db_teams, session)
-        _upsert_map_games(m, match, vetos_by_order, session)
+            _upsert_match_roster(m, match, db_teams, db_players, session)
+            vetos_by_order = _upsert_map_vetos(m, match, db_teams, session)
+            _upsert_map_games(m, match, vetos_by_order, session)
+        except Exception as e:
+            logger.error(f"Error processing match {m.get('match2id')}: {e}")
 
 
 # Sync entry point
@@ -463,10 +500,10 @@ def sync_tournament(tournament_pagename: str):
         tournament = get_tournament(tournament_pagename, session)
         get_matches(tournament, session)
         session.commit()
-        print(f"Synchronized tournament: {tournament.name}")
+        logger.info(f"Synchronized tournament: {tournament.name}")
     except Exception as e:
         session.rollback()
-        print(f"Error occurred while synchronizing tournament: {e}")
+        logger.error(f"Error occurred while synchronizing tournament: {e}")
         raise
     finally:
         session.close()

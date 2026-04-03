@@ -1,4 +1,5 @@
 import datetime
+import logging
 from collections import Counter
 from parser.utils import parse_replay_blocks
 from pathlib import Path
@@ -18,6 +19,9 @@ from db.models import (
     PlayerEntry,
     Vehicles,
 )
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 OBSERVER_TAG = "ussr:Observer"
 
@@ -70,14 +74,14 @@ def _find_player_by_name(
     best_name = best_player.display_name if best_player else "N/A"
 
     if best_score >= threshold:
-        print(
-            f"  Matched '{name}' → '{best_name}' "
+        logger.info(
+            f"Matched '{name}' → '{best_name}' "
             f"(partial_ratio: {best_score:.0f}, threshold: {threshold})"
         )
         return best_player
 
-    print(
-        f"  Warning: could not match player '{name}' "
+    logger.warning(
+        f"Could not match player '{name}' "
         f"(best score: {best_score:.0f} with '{best_name}')"
     )
     return None
@@ -124,17 +128,28 @@ def resolve_players(
             continue
 
         replay_name = identity.get("name", "")
+        if not replay_name:
+            logger.warning(f"Missing player name for entity_id: {entity_id}")
+            continue
+
         player = _find_player_by_name(
             replay_name, all_players
         )  # ← pass list, not session
 
         if player:
             matched[entity_id] = player
-            if account_id and account_id not in account_id_map:
-                new_accounts.append(
-                    PlayerAccount(player_id=player.id, account_id=account_id)
+            if account_id:
+                # Check if this account is already linked to this player
+                existing_account = (
+                    session.query(PlayerAccount)
+                    .filter_by(player_id=player.id, account_id=account_id)
+                    .first()
                 )
-                account_id_map[account_id] = player
+                if not existing_account and account_id not in account_id_map:
+                    new_accounts.append(
+                        PlayerAccount(player_id=player.id, account_id=account_id)
+                    )
+                    account_id_map[account_id] = player
 
     for account in new_accounts:
         session.add(account)
@@ -153,7 +168,7 @@ def find_map_game(
             tzinfo=datetime.timezone.utc
         )
     except ValueError:
-        print(f"  Warning: could not parse replay date: '{raw_date}'")
+        logger.warning(f"Could not parse replay date: '{raw_date}'")
         replay_dt = None
 
     known_players = list(entity_to_player.values())
@@ -173,8 +188,8 @@ def find_map_game(
 
     top_score = match_scores.most_common(1)[0][1]
     if top_score < 5:
-        print(
-            f"  Low roster overlap with known matches (max {top_score} players). Skipping map/game match."
+        logger.warning(
+            f"Low roster overlap with known matches (max {top_score} players). Skipping map/game match."
         )
         return None
 
@@ -186,7 +201,9 @@ def find_map_game(
         candidates = session.query(Match).filter(Match.id.in_(top_matches)).all()
         candidates_with_dt = [m for m in candidates if m.date_time is not None]
         if not candidates_with_dt:
-            print(f"  No candidate matches with valid date. Skipping map/game match.")
+            logger.info(
+                f"No candidate matches with valid date. Skipping map/game match."
+            )
             return None
         best_match = min(
             candidates_with_dt,
@@ -194,8 +211,8 @@ def find_map_game(
         )
         best_match_id = best_match.id
     else:
-        print(
-            f"  Multiple candidate matches with equal roster overlap and no replay date. Skipping map/game match."
+        logger.info(
+            f"Multiple candidate matches with equal roster overlap and no replay date. Skipping map/game match."
         )
         return None
 
@@ -261,6 +278,18 @@ def build_player_entries(
         if identity.get("vehicleType") == OBSERVER_TAG:
             continue
 
+        # Check for existing entry to prevent duplicates
+        game_entity_id = str(entity_id)
+        existing_entry = (
+            session.query(PlayerEntry)
+            .filter_by(game_id=game_id, game_entity_id=game_entity_id)
+            .first()
+        )
+        if existing_entry:
+            logger.debug(f"Player entry already exists: game {game_id}, entity {game_entity_id}")
+            entries.append(existing_entry)
+            continue
+
         perf = perf_list[0]
         player = entity_to_player.get(entity_id)
 
@@ -277,7 +306,7 @@ def build_player_entries(
                 game_id=game_id,
                 player_id=player.id if player else None,
                 # Identity
-                game_entity_id=str(entity_id),
+                game_entity_id=game_entity_id,
                 name=identity.get("name"),
                 team_index=perf.get("team"),
                 # Vehicle
@@ -345,24 +374,37 @@ def build_player_entries(
 
 def import_replay(replay_path: str, session: Session) -> int | None:
     blocks = parse_replay_blocks(replay_path)
+    if not blocks or len(blocks) < 2:
+        logger.error(f"Invalid replay structure: insufficient blocks in {replay_path}")
+        return None
+
     block0 = blocks[0]
     results = blocks[1][0]
     roster = blocks[1][1]
 
     arena_id = str(results.get("arenaUniqueID", ""))
+    if not arena_id:
+        logger.error(f"Missing arenaUniqueID in replay: {replay_path}")
+        return None
+
     common = results.get("common", {})
     vehicles = results.get("vehicles", {})
 
-    if session.query(Game).filter_by(arena_unique_id=arena_id).first():
-        print(f"  Skipping duplicate replay with arenaUniqueID: {arena_id}")
-        return None
+    if not vehicles:
+        logger.warning(f"No vehicle data in replay: {replay_path}")
+
+    # Check for duplicate game first
+    existing_game = session.query(Game).filter_by(arena_unique_id=arena_id).first()
+    if existing_game:
+        logger.info(f"Game already imported: {arena_id} (ID: {existing_game.id})")
+        return existing_game.id
 
     entity_to_player = resolve_players(roster, vehicles, session)
     map_game = find_map_game(block0, entity_to_player, session)
 
     if map_game is None:
-        print(
-            f"  No matching map/game found for replay. Importing with null map/game reference."
+        logger.warning(
+            f"No matching map/game found for replay. Importing with null map/game reference."
         )
 
     game = build_game(
@@ -377,8 +419,8 @@ def import_replay(replay_path: str, session: Session) -> int | None:
 
     session.commit()
     unmatched = [e for e in entries if e.player_id is None]
-    print(
-        f"  Imported game {game.id}: {game.map} | "
+    logger.info(
+        f"Imported game {game.id}: {game.map} | "
         f"{len(entries)} players ({len(unmatched)} unmatched) | "
         f"winner: team {game.winner_index}"
         + (f" → MapGame {map_game.id}" if map_game else " [UNLINKED]")

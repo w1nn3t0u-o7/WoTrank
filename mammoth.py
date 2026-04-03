@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 from parser.liquipedia_sync import sync_tournament
 from parser.replay_importer import import_replay
@@ -8,12 +9,14 @@ from typing import Optional
 
 from db.database import SessionLocal, engine, init_db
 from db.models import Base, Tournament, TournamentMode
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def create_tables():
     init_db()
-
-    print("Database tables created.")
+    logger.info("Database tables created.")
 
 
 def drop_tables():
@@ -22,25 +25,24 @@ def drop_tables():
     )
     if confirm.lower() == "yes":
         Base.metadata.drop_all(engine)
-        print("All database tables dropped.")
+        logger.info("All database tables dropped.")
     else:
-        print("Drop tables cancelled.")
+        logger.info("Drop tables cancelled.")
 
 
 def recreate_tables():
     drop_tables()
     create_tables()
-
-    print("Database tables recreated.")
+    logger.info("Database tables recreated.")
 
 
 def import_one(replay_path: str):
     session = SessionLocal()
     try:
         import_replay(replay_path, session)
-        print(f"Replay imported successfully: {replay_path}")
+        logger.info(f"Replay imported successfully: {replay_path}")
     except Exception as e:
-        print(f"Error importing replay: {e}")
+        logger.error(f"Error importing replay: {e}")
         session.rollback()
     finally:
         session.close()
@@ -48,17 +50,17 @@ def import_one(replay_path: str):
 
 def import_directory(directory: str):
     replays = list(Path(directory).rglob("*.wotreplay"))
-    print(f"Found {len(replays)} replays in directory: {directory}")
+    logger.info(f"Found {len(replays)} replays in directory: {directory}")
     session = SessionLocal()
     for replay in replays:
-        print(f"Processing: {replay}")
+        logger.debug(f"Processing: {replay}")
         try:
             import_replay(str(replay), session)
         except Exception as e:
-            print(f"Error importing {replay}: {e}")
+            logger.error(f"Error importing {replay}: {e}")
             session.rollback()
     session.close()
-    print("Finished importing replays.")
+    logger.info("Finished importing replays.")
 
 
 def export_to_json(
@@ -66,23 +68,23 @@ def export_to_json(
 ) -> None:
     path = Path(replay_path)
     if not path.exists():
-        print(f"Error: file not found: {replay_path}")
+        logger.error(f"File not found: {replay_path}")
         sys.exit(1)
 
     try:
         blocks = parse_replay_blocks(replay_path)
     except ValueError as e:
-        print(f"Error: {e}")
+        logger.error(f"Error parsing replay blocks: {e}")
         sys.exit(1)
 
     if block is not None:
         try:
             block_idx = int(block)
         except ValueError:
-            print(f"Error: block must be an integer, got: {block!r}")
+            logger.error(f"Block must be an integer, got: {block!r}")
             sys.exit(1)
         if block_idx >= len(blocks):
-            print(f"Error: replay only has {len(blocks)} block(s)")
+            logger.error(f"Replay only has {len(blocks)} block(s)")
             sys.exit(1)
         output_data = blocks[block_idx]
         label = f"block {block_idx}"
@@ -94,9 +96,9 @@ def export_to_json(
 
     if output_path:
         Path(output_path).write_text(json_str, encoding="utf-8")
-        print(f"Saved {label} to {output_path}")
+        logger.info(f"Saved {label} to {output_path}")
     else:
-        print(json_str)
+        logger.info(json_str)
 
 
 def sync_liquipedia(tournament_pagename: str):
@@ -108,7 +110,7 @@ def set_tournament_mode(liquipedia_id: int, mode: str):
         parsed_mode = TournamentMode(mode)
     except ValueError:
         valid = ", ".join(m.value for m in TournamentMode)
-        print(f"Error: invalid mode: {mode!r}. Valid modes are: {valid}")
+        logger.error(f"Invalid mode: {mode!r}. Valid modes are: {valid}")
         sys.exit(1)
 
     with SessionLocal() as session:
@@ -116,13 +118,13 @@ def set_tournament_mode(liquipedia_id: int, mode: str):
             session.query(Tournament).filter_by(liquipedia_id=liquipedia_id).first()
         )
         if not tournament:
-            print(f"Error: tournament not found with Liquipedia ID: {liquipedia_id}")
+            logger.error(f"Tournament not found with Liquipedia ID: {liquipedia_id}")
             sys.exit(1)
 
         tournament.mode = parsed_mode
         session.commit()
 
-    print(
+    logger.info(
         f"Updated tournament '{tournament.name}' (Liquipedia ID: {liquipedia_id}) with mode: {parsed_mode.value}"
     )
 
@@ -131,14 +133,14 @@ def discover_maps(directory: str):
     maps = list_all_replay_maps(directory)
 
     if not maps:
-        print("No replays found or no map data extracted.")
+        logger.warning("No replays found or no map data extracted.")
         return
 
     lines = [f'  "{k}": "{v}",' for k, v in maps.items()]
     output = "MAPS = {\n" + "\n".join(lines) + "\n}"
 
-    print(output)
-    print(f"\n{len(maps)} unique maps found")
+    logger.info(output)
+    logger.info(f"{len(maps)} unique maps found")
 
 
 COMMANDS = {
@@ -164,10 +166,10 @@ COMMANDS = {
 
 
 def usage():
-    print("Usage: python manage.py <command> [args]\n")
-    print("Commands:")
+    logger.info("Usage: python mammoth.py <command> [args]")
+    logger.info("Commands:")
     for cmd, (_, desc) in COMMANDS.items():
-        print(f"  {cmd:<12} {desc}")
+        logger.info(f"  {cmd:<12} {desc}")
 
 
 if __name__ == "__main__":

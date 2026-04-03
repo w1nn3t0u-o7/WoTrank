@@ -9,8 +9,9 @@
 - [x] Add server field besides location that will derive info from location
 - [x] Add function that will populate matches, teams and players tables
 - [x] deal with different languages map names
+- [x] add colors to the logs for better readability
+- [ ] Add a better way of handling database url as in python api video
 - [ ] Add function for filling in vehicles table
-- [ ] add colors to the logs for better readability
 - [ ] learn about alembic to avoid dropping tables with data if table models are changed
 - [ ] deal with the differing replay nicknames and liquipedia data
     - [ ] 2 names are cant be currently matched by fuzzy matcher
