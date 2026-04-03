@@ -1,12 +1,24 @@
 import json
 import os
+from typing import Optional
 
 import requests
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from db.database import SessionLocal
-from db.models import MapGame, MapVeto, Match, MatchRoster, Player, Team, Tournament
+from db.models import (
+    MapGame,
+    MapVeto,
+    Match,
+    MatchRoster,
+    Player,
+    Team,
+    Tournament,
+    TournamentMode,
+    TournamentServer,
+    TournamentType,
+)
 
 load_dotenv()
 
@@ -49,12 +61,12 @@ def _get(endpoint: str, params: dict) -> list:
 
 
 REGION_TO_SERVER = {
-    "Europe": "EU",
-    "North America": "NA",
+    "Europe": TournamentServer.EU,
+    "North America": TournamentServer.NA,
 }
 
 
-def _parse_location(item: dict) -> tuple[str, str]:
+def _parse_location(item: dict) -> tuple[Optional[str], Optional[TournamentServer]]:
     locations = item.get("locations")
     tournament_type = item.get("type")
 
@@ -63,8 +75,8 @@ def _parse_location(item: dict) -> tuple[str, str]:
 
     values = list(locations.values())
 
-    if tournament_type.lower() == "offline":
-        return ", ".join(values), "World"
+    if tournament_type == TournamentType.OFFLINE:
+        return ", ".join(values), TournamentServer.WORLD
 
     known_regions = [v for v in values if v in REGION_TO_SERVER]
     unknown_regions = [v for v in values if v not in REGION_TO_SERVER]
@@ -72,32 +84,40 @@ def _parse_location(item: dict) -> tuple[str, str]:
     region = ", ".join(known_regions + unknown_regions)
 
     if len(known_regions) > 1:
-        server = "World"
+        server = TournamentServer.WORLD
     elif len(known_regions) == 1:
         server = REGION_TO_SERVER[known_regions[0]]
     else:
-        server = "Unknown"
+        server = None
 
     return region, server
 
 
-def _parse_mode(name: str, series: str) -> str:
+def _parse_mode(name: str, series: str) -> Optional[TournamentMode]:
     text = f"{name} {series or ''}".lower()
     if "onslaught" in text:
-        return "Onslaught"
+        return TournamentMode.ONSLAUGHT
     elif "clan showdown" in text:
-        return "Standard"
+        return TournamentMode.STANDARD
     else:
         return None
 
 
-def _parse_round(bracket_data: dict) -> str:
+def _parse_round(bracket_data: dict) -> Optional[str]:
     # Right now it works for brackets 4U4L1D and 8L4DS-2Q-U-8L2D-4QL
     coordinates = bracket_data.get("coordinates")
     if not coordinates:
         return None  # group stage / non-bracket match
+
     section = bracket_data.get("bracketsection")
-    depth = int(coordinates.get("semanticDepth"))
+    if section is None:
+        return None
+
+    raw_depth = coordinates.get("semanticDepth")
+    if raw_depth is None:
+        return None
+
+    depth = int(raw_depth)
 
     if depth == 0:
         return "Grand Final"
@@ -110,7 +130,7 @@ def _parse_round(bracket_data: dict) -> str:
     elif depth >= 4:
         return f"{section} Bracket Round {depth - 3}"
     else:
-        return None
+        return None  # unexpected negative depth
 
 
 # UPSERT FUNCTIONS

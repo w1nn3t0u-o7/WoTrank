@@ -4,13 +4,15 @@ from parser.liquipedia_sync import sync_tournament
 from parser.replay_importer import import_replay
 from parser.utils import list_all_replay_maps, parse_replay_blocks
 from pathlib import Path
+from typing import Optional
 
 from db.database import SessionLocal, engine, init_db
-from db.models import Base, Tournament
+from db.models import Base, Tournament, TournamentMode
 
 
 def create_tables():
     init_db()
+
     print("Database tables created.")
 
 
@@ -28,6 +30,7 @@ def drop_tables():
 def recreate_tables():
     drop_tables()
     create_tables()
+
     print("Database tables recreated.")
 
 
@@ -58,7 +61,9 @@ def import_directory(directory: str):
     print("Finished importing replays.")
 
 
-def export_to_json(replay_path: str, output_path: str, block: str = None):
+def export_to_json(
+    replay_path: str, output_path: str, block: Optional[str] = None
+) -> None:
     path = Path(replay_path)
     if not path.exists():
         print(f"Error: file not found: {replay_path}")
@@ -71,7 +76,11 @@ def export_to_json(replay_path: str, output_path: str, block: str = None):
         sys.exit(1)
 
     if block is not None:
-        block_idx = int(block)
+        try:
+            block_idx = int(block)
+        except ValueError:
+            print(f"Error: block must be an integer, got: {block!r}")
+            sys.exit(1)
         if block_idx >= len(blocks):
             print(f"Error: replay only has {len(blocks)} block(s)")
             sys.exit(1)
@@ -95,24 +104,26 @@ def sync_liquipedia(tournament_pagename: str):
 
 
 def set_tournament_mode(liquipedia_id: int, mode: str):
-    VALID_MODES = ("Standard", "Onslaught", "Attack/Defense")
-    if mode not in VALID_MODES:
-        print(f"Error: invalid mode: {mode}. Valid modes are: {', '.join(VALID_MODES)}")
+    try:
+        parsed_mode = TournamentMode(mode)
+    except ValueError:
+        valid = ", ".join(m.value for m in TournamentMode)
+        print(f"Error: invalid mode: {mode!r}. Valid modes are: {valid}")
         sys.exit(1)
 
-    session = SessionLocal()
-    tournament = (
-        session.query(Tournament).filter_by(liquipedia_id=liquipedia_id).first()
-    )
-    if not tournament:
-        print(f"Error: tournament not found with Liquipedia ID: {liquipedia_id}")
-        session.close()
-        sys.exit(1)
-    tournament.mode = mode
-    session.commit()
-    session.close()
+    with SessionLocal() as session:
+        tournament = (
+            session.query(Tournament).filter_by(liquipedia_id=liquipedia_id).first()
+        )
+        if not tournament:
+            print(f"Error: tournament not found with Liquipedia ID: {liquipedia_id}")
+            sys.exit(1)
+
+        tournament.mode = parsed_mode
+        session.commit()
+
     print(
-        f"Updated tournament '{tournament.name}' (Liquipedia ID: {liquipedia_id}) with mode: {mode}"
+        f"Updated tournament '{tournament.name}' (Liquipedia ID: {liquipedia_id}) with mode: {parsed_mode.value}"
     )
 
 

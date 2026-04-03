@@ -2,6 +2,7 @@ import datetime
 from collections import Counter
 from parser.utils import parse_replay_blocks
 from pathlib import Path
+from typing import Optional
 
 from rapidfuzz import fuzz
 from sqlalchemy.orm import Session
@@ -40,8 +41,10 @@ def _all_names(player: Player) -> list[str]:
     ]
 
 
-def _find_player_by_name(name: str, session: Session) -> Player | None:
-    all_players = session.query(Player).all()
+def _find_player_by_name(
+    name: str,
+    all_players: list[Player],
+) -> Optional[Player]:
     norm_name = _normalize(name)
 
     candidate_pool: list[tuple[str, Player]] = []
@@ -52,12 +55,10 @@ def _find_player_by_name(name: str, session: Session) -> Player | None:
                 if nc:
                     candidate_pool.append((nc, player))
 
+    best_player, best_score = None, 0.0
     for nc, player in candidate_pool:
         if norm_name == nc:
             return player
-
-    best_player, best_score = None, 0.0
-    for nc, player in candidate_pool:
         if len(nc) < 3:
             continue
         score = fuzz.partial_ratio(nc, norm_name)
@@ -66,16 +67,18 @@ def _find_player_by_name(name: str, session: Session) -> Player | None:
             best_player = player
 
     threshold = _adaptive_threshold(norm_name)
+    best_name = best_player.display_name if best_player else "N/A"
+
     if best_score >= threshold:
         print(
-            f"  Matched '{name}' → '{best_player.display_name}' "
+            f"  Matched '{name}' → '{best_name}' "
             f"(partial_ratio: {best_score:.0f}, threshold: {threshold})"
         )
         return best_player
 
     print(
-        f"  Warning: could not match player with name '{name}' "
-        f"(best score: {best_score:.0f} with '{best_player.display_name}')"
+        f"  Warning: could not match player '{name}' "
+        f"(best score: {best_score:.0f} with '{best_name}')"
     )
     return None
 
@@ -96,14 +99,14 @@ def _adaptive_threshold(norm_name: str) -> float:
 def resolve_players(
     roster: dict, vehicles: dict, session: Session
 ) -> dict[str, Player]:
-    """Returns {entity_id: Player}. Tries account_id first, falls back to name.
-    Writes new PlayerAccount rows when a name match reveals an unknown account."""
-
     account_id_map: dict[int, Player] = {
         row.account_id: row.player
         for row in session.query(PlayerAccount).join(PlayerAccount.player).all()
         if row.account_id is not None
     }
+
+    # Query once, reuse across all name lookups
+    all_players = session.query(Player).all()
 
     matched: dict[str, Player] = {}
     new_accounts: list[PlayerAccount] = []
@@ -121,16 +124,15 @@ def resolve_players(
             continue
 
         replay_name = identity.get("name", "")
-        player = _find_player_by_name(replay_name, session)
+        player = _find_player_by_name(
+            replay_name, all_players
+        )  # ← pass list, not session
 
         if player:
             matched[entity_id] = player
             if account_id and account_id not in account_id_map:
                 new_accounts.append(
-                    PlayerAccount(
-                        player_id=player.id,
-                        account_id=account_id,
-                    )
+                    PlayerAccount(player_id=player.id, account_id=account_id)
                 )
                 account_id_map[account_id] = player
 
@@ -142,12 +144,14 @@ def resolve_players(
 
 def find_map_game(
     block0: dict, entity_to_player: dict[str, Player], session: Session
-) -> MapGame | None:
+) -> Optional[MapGame]:
     """Returns a MapGame matching the replay's map and game mode."""
-    map_name = MAPS.get(block0.get("mapName"))
+    map_name = MAPS[block0["mapName"]]
     raw_date = block0.get("dateTime", "")
     try:
-        replay_dt = datetime.datetime.strptime(raw_date, "%d.%m.%Y %H:%M:%S")
+        replay_dt = datetime.datetime.strptime(raw_date, "%d.%m.%Y %H:%M:%S").replace(
+            tzinfo=datetime.timezone.utc
+        )
     except ValueError:
         print(f"  Warning: could not parse replay date: '{raw_date}'")
         replay_dt = None
@@ -200,7 +204,7 @@ def find_map_game(
     )
 
 
-def resolve_vehicle(vehicle_type_raw: str, session: Session) -> Vehicles | None:
+def resolve_vehicle(vehicle_type_raw: str, session: Session) -> Optional[Vehicles]:
     if ":" not in vehicle_type_raw:
         return None
     _, tag = vehicle_type_raw.split(":", 1)
@@ -216,7 +220,9 @@ def build_game(
 ) -> Game:
     raw_date = block0.get("dateTime", "")
     try:
-        dt = datetime.datetime.strptime(raw_date, "%d.%m.%Y %H:%M:%S")
+        dt = datetime.datetime.strptime(raw_date, "%d.%m.%Y %H:%M:%S").replace(
+            tzinfo=datetime.timezone.utc
+        )
     except ValueError:
         dt = None
 
@@ -225,7 +231,7 @@ def build_game(
     return Game(
         map_game_id=map_game_id,
         arena_unique_id=str(arena_id),
-        map=MAPS.get(block0.get("mapName")),
+        map=MAPS[block0["mapName"]],
         game_version=block0.get("clientVersionFromExe"),
         server=block0.get("serverName"),
         date_time=dt,
